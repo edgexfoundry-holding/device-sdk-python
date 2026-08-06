@@ -1,0 +1,29 @@
+# Copyright (C) 2026 YIQISOFT
+# SPDX-License-Identifier: Apache-2.0
+
+# Device Simple - Docker Compose for local development
+# Usage: docker compose -f examples/simple/docker-compose.yaml up --build
+#
+# Note: For full EdgeX deployment, use EdgeX's docker-compose which already includes
+# MQTT broker (messagebus), core-metadata, core-data, etc. This file is for
+# standalone testing of device-simple only.
+
+version: '3.8'
+
+services:
+  device-simple:
+    image: device-simple:latest
+    container_name: edgex-device-simple
+    environment:
+      SERVICE_HOST: edgex-device-simple
+    ports:
+      - "59986:59986"
+    networks:
+      - edgex-network
+    volumes:
+      # use host timezone
+      - /etc/localtime:/etc/localtime:ro
+
+networks:
+  edgex-network:
+    driver: bridge

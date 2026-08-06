@@ -1,0 +1,44 @@
+{
+  "name": "fake-profile",
+  "description": "Simulated device profile for the Python device-simple example",
+  "manufacturer": "EdgeX",
+  "model": "SIM-fake",
+  "labels": ["simple", "simulated"],
+  "deviceResources": [
+    {
+      "name": "random-number",
+      "description": "A randomly generated integer reading",
+      "properties": {
+        "valueType": "Int32",
+        "readWrite": "R",
+        "defaultValue": "0",
+        "units": "count"
+      }
+    },
+    {
+      "name": "switch",
+      "description": "A simulated on/off switch",
+      "properties": {
+        "valueType": "Bool",
+        "readWrite": "W",
+        "defaultValue": "false"
+      }
+    }
+  ],
+  "deviceCommands": [
+    {
+      "name": "Get",
+      "readWrite": "R",
+      "resourceOperations": [
+        { "deviceResource": "random-number" }
+      ]
+    },
+    {
+      "name": "Set",
+      "readWrite": "W",
+      "resourceOperations": [
+        { "deviceResource": "switch" }
+      ]
+    }
+  ]
+}

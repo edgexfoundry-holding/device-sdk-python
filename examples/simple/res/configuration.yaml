@@ -1,0 +1,38 @@
+# Copyright (C) 2026 YIQISOFT
+# SPDX-License-Identifier: Apache-2.0
+# Minimal configuration for device-simple (defaults from SDK/common config)
+
+Writable:
+  LogLevel: INFO
+
+Service:
+  Host: "0.0.0.0"          # bind all interfaces
+  Port: 59986               # device service port (599xx range)
+  StartupMsg: "device simple started"
+
+# MessageBus - uses SDK defaults (host=localhost, port=1883, prefix=edgex, type=mqtt)
+# Override via env: EDGEX_MESSAGEBUS_HOST, EDGEX_MESSAGEBUS_PORT, EDGEX_MESSAGEBUS_TOPIC
+MessageBus:
+  Optional:
+    ClientId: "device-simple"
+
+# Max concurrent command requests (<=0 uses SDK default 32)
+MaxConcurrentCommands: 32
+
+Device:
+  # Directory paths (relative to config file)
+  ProfilesDir: "./res/profiles"
+  DevicesDir: "./res/devices"
+  ProvisionWatchersDir: "./res/provisionwatchers"
+  Discovery:
+    Enabled: false
+    Interval: "30s"
+  AutoEvents:
+    SendChangedReadingsOnly: false
+
+# Core service endpoints - override via env if needed:
+# EDGEX_CORE_DATA_HOST, EDGEX_CORE_DATA_PORT
+# EDGEX_CORE_METADATA_HOST, EDGEX_CORE_METADATA_PORT
+# EDGEX_CORE_COMMAND_HOST, EDGEX_CORE_COMMAND_PORT
+# EDGEX_REGISTRY_HOST, EDGEX_REGISTRY_PORT
+# EDGEX_DATABASE_HOST, EDGEX_DATABASE_PORT
