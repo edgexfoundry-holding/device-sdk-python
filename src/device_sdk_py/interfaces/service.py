@@ -191,6 +191,15 @@ class DeviceServiceSDK(ABC):
         service; instead call the bootstrap entry point."""
 
     @abstractmethod
+    def stop(self) -> None:
+        """Gracefully stop this Device Service.
+
+        Stops all background pumps, subscriptions, and threads, disconnects the
+        messaging client, shuts down the metadata executor, and cleans up resources.
+        This method is idempotent and safe to call multiple times.
+        """
+
+    @abstractmethod
     def name(self) -> str:
         """Return the name of this Device Service."""
 

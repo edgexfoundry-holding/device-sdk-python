@@ -1164,6 +1164,15 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
         finally:
             self._shutdown()
 
+    def stop(self) -> None:
+        """Gracefully stop this Device Service.
+
+        Stops all background pumps, subscriptions, and threads, disconnects the
+        messaging client, shuts down the metadata executor, and cleans up resources.
+        This method is idempotent and safe to call multiple times.
+        """
+        self._shutdown()
+
     def _shutdown(self) -> None:
         """Signal background pumps/subscriptions to stop and cleanup."""
         self._shutdown_event.set()
