@@ -642,7 +642,7 @@ def _validate_service_and_device_state(device_name: str, configuration: Any,
     # check the Device's AdminState
     if device.admin_state == ADMIN_STATE_LOCKED:
         raise create_edgx_error(KIND_SERVICE_LOCKED, f"device {device.name} locked")
-    # check the Device's OperatingState; if it is a device return attempt, the operating
+# check the Device's OperatingState; if it is a device return attempt, the operating
     # state is allowed to be DOWN
     if device.operating_state == OPERATING_STATE_DOWN:
         err = create_edgx_error(KIND_SERVICE_LOCKED,
@@ -650,7 +650,9 @@ def _validate_service_and_device_state(device_name: str, configuration: Any,
         if _device_option(configuration, "allowed_fails", 0) == 0 or \
                 _device_option(configuration, "device_down_timeout", 0) == 0:
             raise err
-        if failure_count(device_name) > 0:
+        # Only raise if device has explicitly exhausted retries (in map with 0 count).
+        # New devices not in _allowed_request_failures map are allowed (device return).
+        if device_name in _allowed_request_failures and _allowed_request_failures[device_name] == 0:
             raise err
 
     # check the Device's ProfileName
