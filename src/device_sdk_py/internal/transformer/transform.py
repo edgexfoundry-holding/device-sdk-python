@@ -210,14 +210,22 @@ reading and every other value a simple reading. The reading origin is the Comman
 
 
 def command_values_to_event(cvs: Optional[List[CommandValue]], device_name: str,
-                            source_name: str, data_transform: bool = True) -> Optional[Event]:
+                            source_name: str, data_transform: bool = True,
+                            reading_units: bool = True) -> Optional[Event]:
     """Convert a list of CommandValues into an Event for the given Device.
 
     Returns None when no readings
-were produced (an uninitialized or empty reading set). For each CommandValue the
+    were produced (an uninitialized or empty reading set). For each CommandValue the
     outgoing data transformation, the assertion check and the ResourceOperation mapping are
     applied; an overflowing or NaN value is replaced by a String reading with the value
     "overflow" / "NaN".
+
+    Args:
+        cvs: The CommandValues to convert.
+        device_name: The name of the device.
+        source_name: The source name for the event.
+        data_transform: Whether to apply data transformation.
+        reading_units: Whether to include units in the readings. When False, units are omitted.
 
     Raises:
         TransformerError: When the Device or a DeviceResource is not found, an assertion
@@ -285,7 +293,10 @@ were produced (an uninitialized or empty reading set). For each CommandValue the
 
         reading = command_value_to_reading(
             cv, device.name, device.profile_name, dr.properties.media_type, origin)
-        reading.units = dr.properties.units
+        if reading_units:
+            reading.units = dr.properties.units
+        else:
+            reading.units = ""
         readings.append(reading)
 
     if not transforms_ok:

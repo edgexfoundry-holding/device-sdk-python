@@ -608,11 +608,12 @@ def _command_values_to_event(results: List[CommandValue], device: Device,
                              source_name: str,
                              configuration: Any) -> Optional[Event]:
     """Convert the CommandValues produced by the driver into an Event via the transformer
-( call and its error wrapping).
+    ( call and its error wrapping).
     """
     data_transform = _device_option(configuration, "data_transform", True)
+    reading_units = _device_option(configuration, "reading_units", True)
     try:
-        return command_values_to_event(results, device.name, source_name, data_transform)
+        return command_values_to_event(results, device.name, source_name, data_transform, reading_units)
     except TransformerError as exc:
         raise create_edgx_error(KIND_SERVER_ERROR,
                              "failed to convert CommandValue to Event") from exc

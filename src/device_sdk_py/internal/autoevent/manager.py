@@ -33,9 +33,8 @@ from ..cache import (
     Devices,
     Profiles,
 )
-# OPERATING_STATE_DOWN is defined in internal/common/consts (mirroring the Go
-# `models.OperatingState` constants) and re-exported by common, not by cache.
 from ..common.consts import OPERATING_STATE_DOWN
+from ..application.command import _device_option
 from .executor import AutoEventExecutor, create_executor
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard
@@ -119,13 +118,19 @@ class AutoEventManager:
                 self._logger.warning(
                     "AutoEvent on %s has no source name; skipping", device.name)
                 continue
+            # Read device config options for this auto event
+            send_changed_readings_only = False
+            if self._device_service.configuration is not None:
+                device_opt = getattr(self._device_service.configuration, "device", None)
+                if device_opt is not None:
+                    send_changed_readings_only = getattr(device_opt, "send_changed_readings_only", False)
             try:
                 executor = create_executor(
                     device_name=device.name,
                     auto_event=auto_event,
                     read_handler=self._read,
                     send_handler=self._send,
-                    send_changed_readings_only=auto_event.on_change)
+                    send_changed_readings_only=send_changed_readings_only)
             except Exception: # pragma: no cover - defensive
                 self._logger.exception(
                     "AutoEvent - failed to create executor for %s/%s",

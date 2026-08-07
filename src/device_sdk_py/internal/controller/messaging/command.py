@@ -259,6 +259,11 @@ def subscribe_commands(
                     if event is not None and reserved[PUSH_EVENT]:
                         from device_sdk_py.internal.controller.messaging.publish import publish_event
                         try:
+                            # Read MaxEventSize from device service configuration
+                            max_event_size = 0
+                            if device_service is not None and hasattr(device_service, "configuration"):
+                                device_opt = getattr(device_service.configuration, "device", None)
+                                max_event_size = getattr(device_opt, "max_event_size", 0) if device_opt else 0
                             publish_event(
                                 client=client,
                                 event=event,
@@ -268,7 +273,7 @@ def subscribe_commands(
                                 profile_name=event.profile_name,
                                 device_name=event.device_name,
                                 source_name=event.source_name,
-                                max_event_size=0,
+                                max_event_size=max_event_size,
                                 logger=log,
                             )
                         except Exception as exc:
@@ -318,6 +323,11 @@ def subscribe_commands(
                     if event is not None:
                         from device_sdk_py.internal.controller.messaging.publish import publish_event
                         try:
+                            # Read MaxEventSize from device service configuration
+                            max_event_size = 0
+                            if device_service is not None and hasattr(device_service, "configuration"):
+                                device_opt = getattr(device_service.configuration, "device", None)
+                                max_event_size = getattr(device_opt, "max_event_size", 0) if device_opt else 0
                             publish_event(
                                 client=client,
                                 event=event,
@@ -327,7 +337,7 @@ def subscribe_commands(
                                 profile_name=event.profile_name,
                                 device_name=event.device_name,
                                 source_name=event.source_name,
-                                max_event_size=0,
+                                max_event_size=max_event_size,
                                 logger=log,
                             )
                         except Exception as exc:

@@ -136,7 +136,10 @@ class DeviceService(DeviceServiceSDK):
         self.device_service_model = _DeviceServiceModel(name=service_key)
 
         #: The async readings channel handed to ProtocolDrivers via `async_values_channel`.
-        self._async_values_channel: queue.Queue[AsyncValues] = queue.Queue()
+        # Buffer size is configurable via AsyncBufferSize device option.
+        device_opt = getattr(configuration, "device", None)
+        async_buffer_size = getattr(device_opt, "async_buffer_size", 0) if device_opt else 0
+        self._async_values_channel: queue.Queue[AsyncValues] = queue.Queue(maxsize=async_buffer_size)
         #: The discovered devices channel handed to ProtocolDrivers via
         #: `discovered_device_channel`.
         self._discovered_device_channel: queue.Queue[List[DiscoveredDevice]] = queue.Queue()
@@ -1077,6 +1080,9 @@ hostname IP. Extended Core services (core-command) reach this address to execute
         def handler(event: Event, correlation_id: str) -> None:
             if self._messaging_client is None:
                 return
+            # Read MaxEventSize from device configuration
+            device_opt = getattr(self.configuration, "device", None)
+            max_event_size = getattr(device_opt, "max_event_size", DEFAULT_MAX_EVENT_SIZE) if device_opt else DEFAULT_MAX_EVENT_SIZE
             try:
                 publish_event(
                     client=self._messaging_client,
@@ -1087,7 +1093,7 @@ hostname IP. Extended Core services (core-command) reach this address to execute
                     profile_name=event.profile_name,
                     device_name=event.device_name,
                     source_name=event.source_name,
-                    max_event_size=DEFAULT_MAX_EVENT_SIZE,
+                    max_event_size=max_event_size,
                     logger=self._logger,
                 )
             except Exception as exc: # pylint: disable=broad-except
@@ -1272,11 +1278,12 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
         device_opt = getattr(self.configuration, "device", None)
         if device_opt is not None:
             data_transform = getattr(device_opt, "data_transform", True)
+            reading_units = getattr(device_opt, "reading_units", True)
 
         from ..transformer.transform import command_values_to_event
         try:
             event = command_values_to_event(
-                acv.command_values, acv.device_name, acv.source_name, data_transform
+                acv.command_values, acv.device_name, acv.source_name, data_transform, reading_units
             )
         except Exception as exc:
             self._logger.error("Failed to transform AsyncValues to Event: %s", exc)
