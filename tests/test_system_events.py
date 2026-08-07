@@ -64,11 +64,11 @@ class TestSystemEventAPI(unittest.TestCase):
         envelope = call_args[0][0]
         topic = call_args[0][1]
         self.assertEqual(envelope.content_type, "application/json")
-        self.assertIn("edgex/system-events/device-simple/device/progress", topic)
+        self.assertIn("edgex/system-events/device-simple/device/discovery", topic)
         import json
         payload = json.loads(envelope.payload)
         self.assertEqual(payload["type"], "device")
-        self.assertEqual(payload["action"], "progress")
+        self.assertEqual(payload["action"], "discovery")
         self.assertEqual(payload["details"]["progress"], 50)
         self.assertEqual(payload["details"]["discoveredDeviceCount"], 2)
         self.assertEqual(payload["details"]["message"], "Discovering...")
@@ -81,11 +81,11 @@ class TestSystemEventAPI(unittest.TestCase):
         envelope = call_args[0][0]
         topic = call_args[0][1]
         self.assertEqual(envelope.content_type, "application/json")
-        self.assertIn("edgex/system-events/device-simple/device/progress", topic)
+        self.assertIn("edgex/system-events/device-simple/device/profilescan", topic)
         import json
         payload = json.loads(envelope.payload)
         self.assertEqual(payload["type"], "device")
-        self.assertEqual(payload["action"], "progress")
+        self.assertEqual(payload["action"], "profilescan")
         self.assertEqual(payload["details"]["requestId"], "req-123")
         self.assertEqual(payload["details"]["progress"], 75)
         self.assertEqual(payload["details"]["message"], "Scanning...")
@@ -136,17 +136,17 @@ class TestInternalProgressHelpers(unittest.TestCase):
         self.ds._shutdown()
 
     def test_publish_discovery_progress(self):
-        """_publish_discovery_progress publishes to system-events with device type."""
+        """_publish_discovery_progress publishes to system-events with device type and discovery action."""
         self.ds._publish_discovery_progress(25, 1, "Starting...")
         self.mock_client.publish.assert_called_once()
         call_args = self.mock_client.publish.call_args
         envelope = call_args[0][0]
         topic = call_args[0][1]
-        self.assertIn("edgex/system-events/device-simple/device/progress", topic)
+        self.assertIn("edgex/system-events/device-simple/device/discovery", topic)
         import json
         payload = json.loads(envelope.payload)
         self.assertEqual(payload["type"], "device")
-        self.assertEqual(payload["action"], "progress")
+        self.assertEqual(payload["action"], "discovery")
         self.assertEqual(payload["details"]["progress"], 25)
         self.assertEqual(payload["details"]["discoveredDeviceCount"], 1)
         self.assertEqual(payload["details"]["message"], "Starting...")
@@ -158,11 +158,11 @@ class TestInternalProgressHelpers(unittest.TestCase):
         call_args = self.mock_client.publish.call_args
         envelope = call_args[0][0]
         topic = call_args[0][1]
-        self.assertIn("edgex/system-events/device-simple/device/progress", topic)
+        self.assertIn("edgex/system-events/device-simple/device/profilescan", topic)
         import json
         payload = json.loads(envelope.payload)
         self.assertEqual(payload["type"], "device")
-        self.assertEqual(payload["action"], "progress")
+        self.assertEqual(payload["action"], "profilescan")
         self.assertEqual(payload["details"]["requestId"], "req-456")
         self.assertEqual(payload["details"]["progress"], 50)
         self.assertEqual(payload["details"]["message"], "Halfway")

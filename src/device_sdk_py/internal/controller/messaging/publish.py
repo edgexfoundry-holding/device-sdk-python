@@ -52,7 +52,11 @@ DEVICE_SERVICE_SYSTEM_EVENT_TYPE = "device-service"
 SYSTEM_EVENT_ACTION_ADD = "add"
 SYSTEM_EVENT_ACTION_UPDATE = "update"
 SYSTEM_EVENT_ACTION_DELETE = "delete"
-SYSTEM_EVENT_ACTION_PROGRESS = "progress"
+# Per EdgeX v4.0.2, progress actions are "discovery", "profilescan", or "custom"
+# The legacy "progress" action is deprecated
+SYSTEM_EVENT_ACTION_PROGRESS = "progress"  # deprecated, kept for backward compat
+SYSTEM_EVENT_ACTION_DISCOVERY = "discovery"
+SYSTEM_EVENT_ACTION_PROFILESCAN = "profilescan"
 
 
 def build_event_publish_topic(

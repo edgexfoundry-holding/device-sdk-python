@@ -67,6 +67,8 @@ from ..internal.controller.messaging.publish import (
     DEFAULT_MAX_EVENT_SIZE,
     DEVICE_SYSTEM_EVENT_TYPE,
     SYSTEM_EVENT_ACTION_PROGRESS,
+    SYSTEM_EVENT_ACTION_DISCOVERY,
+    SYSTEM_EVENT_ACTION_PROFILESCAN,
 )
 from ..internal.controller.messaging.callback import _get_base_service_name
 from ..internal.metadata import MetadataClient
@@ -944,16 +946,24 @@ hostname IP. Extended Core services (core-command) reach this address to execute
 # Fall back to the primary non-loopback IP of the machine's outbound route. This is
         # typically the LAN address, which containerised EdgeX core services (core-command)
         # can reach to execute commands against this Device Service.
-        try:
-            import socket
-            probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            probe.connect(("8.8.8.8", 80))
-            address = probe.getsockname()[0]
-            probe.close()
-            if address and not address.startswith("127."):
-                return address
-        except Exception:  # noqa: BLE001
-            pass
+        # This auto-detection can be disabled via configuration.
+        auto_detect = True
+        if service is not None:
+            auto_detect = getattr(service, "auto_detect_host", True)
+        if auto_detect:
+            try:
+                import socket
+                probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                # Use a short timeout to avoid blocking indefinitely
+                probe.settimeout(2.0)
+                probe.connect(("8.8.8.8", 80))
+                address = probe.getsockname()[0]
+                probe.close()
+                if address and not address.startswith("127."):
+                    self._logger.debug("Auto-detected advertised host: %s", address)
+                    return address
+            except Exception:  # noqa: BLE001
+                self._logger.debug("Failed to auto-detect advertised host, falling back to localhost")
         return "localhost"
 
     def _device_labels(self) -> List[str]:
@@ -1440,7 +1450,7 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
                 client=self._messaging_client,
                 service_name=self.name(),
                 event_type=DEVICE_SYSTEM_EVENT_TYPE,
-                action=SYSTEM_EVENT_ACTION_PROGRESS,
+                action=SYSTEM_EVENT_ACTION_DISCOVERY,
                 details={"progress": progress, "discoveredDeviceCount": count, "message": message},
                 base_topic_prefix=self._message_bus_config_obj.base_topic_prefix,
                 logger=self._logger,
@@ -1456,8 +1466,8 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
             publish_system_event(
                 client=self._messaging_client,
                 service_name=self.name(),
-event_type=DEVICE_SYSTEM_EVENT_TYPE, # profile-scan uses device type in Go
-                action=SYSTEM_EVENT_ACTION_PROGRESS,
+                event_type=DEVICE_SYSTEM_EVENT_TYPE, # profile-scan uses device type in Go
+                action=SYSTEM_EVENT_ACTION_PROFILESCAN,
                 details={"requestId": request_id, "progress": progress, "message": message},
                 base_topic_prefix=self._message_bus_config_obj.base_topic_prefix,
                 logger=self._logger,
