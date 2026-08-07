@@ -77,6 +77,7 @@ from ..internal.provision import (
     load_provision_watchers,
 )
 from ..internal.transformer.transform import Event
+from ..internal.clients import Logger, SecretProvider, MetricsManager
 from ..interfaces import DeviceServiceSDK, UpdatableConfig
 from ..models import AsyncValues, DiscoveredDevice
 
@@ -1760,30 +1761,35 @@ Stores the custom configuration so it can be included in the /config
                            "%s; changedCallback will be invoked by the config processor",
                            section_name)
 
-    def logging_client(self) -> "Logger":
-        """Return the logging client.
+    def logging_client(self) -> Logger:
+        """Return the zero-dependency logging client.
 
-        Returns None until the
-        app-functions-sdk-python logger client is ported.
+        The client wraps stdlib logging and provides the EdgeX Logger interface
+        (Debug, Info, Warn, Error, WithField, WithFields, SetLevel).
         """
-        return None
+        if not hasattr(self, "_logger_client"):
+            self._logger_client = Logger(self.name())
+        return self._logger_client
 
-    def secret_provider(self) -> Any:
-        """Return the secret provider.
+    def secret_provider(self) -> SecretProvider:
+        """Return the zero-dependency secret provider.
 
-        Returns None until the secret
-        provider is ported.
+        The provider uses in-memory storage and provides the EdgeX SecretProvider
+        interface (StoreSecret, GetSecret, GetAllSecrets, DeleteSecret).
         """
-        return None
+        if not hasattr(self, "_secret_provider"):
+            self._secret_provider = SecretProvider()
+        return self._secret_provider
 
-    def metrics_manager(self) -> Any:
-        """Return the Metrics Manager used to register counter, gauge, gaugeFloat64 or
-        timer metric types.
+    def metrics_manager(self) -> MetricsManager:
+        """Return the zero-dependency metrics manager.
 
-        Returns None until the metrics
-        manager is ported.
+        The manager uses in-memory storage and provides the EdgeX MetricsManager
+        interface (Counter, Gauge, GaugeFloat64, Timer).
         """
-        return None
+        if not hasattr(self, "_metrics_manager"):
+            self._metrics_manager = MetricsManager()
+        return self._metrics_manager
 
 # -- System events ------------------------------------------------------------
 
