@@ -156,10 +156,17 @@ class MetadataClient:
         requests_body = [dto_serializers.add_device_profile_request(p) for p in profiles]
         self._post(_API_DEVICE_PROFILE_ROUTE, requests_body)
 
-    def add_device_profile(self, profile) -> None:
-        """Add a single DeviceProfile (``POST /api/v3/deviceprofile``)."""
-        self._post(_API_DEVICE_PROFILE_ROUTE,
+    def add_device_profile(self, profile) -> Optional[str]:
+        """Add a single DeviceProfile (``POST /api/v3/deviceprofile``).
+
+        Returns:
+            The profile id assigned by Core Metadata, or ``None`` if not in response.
+        """
+        resp = self._post(_API_DEVICE_PROFILE_ROUTE,
                    [dto_serializers.add_device_profile_request(profile)])
+        if resp and isinstance(resp, list) and resp:
+            return resp[0].get("id")
+        return None
 
     def update_device_profile(self, profile) -> None:
         """Update a DeviceProfile (``PUT /api/v3/deviceprofile``)."""
@@ -193,16 +200,22 @@ Devices are added with ``bypassValidation=true``. In Go the validation round-tri
         _body = [dto_serializers.add_device_request(d) for d in devices]
         self._post(_API_DEVICE_ROUTE, _body, params={"bypassValidation": "true"})
 
-    def add_device(self, device, bypass_validation: bool = False) -> None:
+    def add_device(self, device, bypass_validation: bool = False) -> Optional[str]:
         """Add a single Device (``POST /api/v3/device``).
 
         Mirrors the Go Device client: the ``bypassValidation`` query parameter is always
         sent, telling Core Metadata whether to skip the device validation round-trip to
         this Device Service.
+
+        Returns:
+            The device id assigned by Core Metadata, or ``None`` if not in response.
         """
         _body = [dto_serializers.add_device_request(device)]
         params = {"bypassValidation": "true" if bypass_validation else "false"}
-        self._post(_API_DEVICE_ROUTE, _body, params=params)
+        resp = self._post(_API_DEVICE_ROUTE, _body, params=params)
+        if resp and isinstance(resp, list) and resp:
+            return resp[0].get("id")
+        return None
 
     # --------------------------------------------------------------------
     # ProvisionWatcher endpoints
@@ -220,10 +233,17 @@ Devices are added with ``bypassValidation=true``. In Go the validation round-tri
         _body = [dto_serializers.add_provision_watcher_request(w) for w in watchers]
         self._post(_API_PROVISION_WATCHER_ROUTE, _body)
 
-    def add_provision_watcher(self, watcher) -> None:
-        """Add a single ProvisionWatcher (``POST /api/v3/provisionwatcher``)."""
-        _body = [dto_serializers.add_provision_watcher_request(watcher)]
-        self._post(_API_PROVISION_WATCHER_ROUTE, _body)
+    def add_provision_watcher(self, watcher) -> Optional[str]:
+        """Add a single ProvisionWatcher (``POST /api/v3/provisionwatcher``).
+
+        Returns:
+            The watcher id assigned by Core Metadata, or ``None`` if not in response.
+        """
+        resp = self._post(_API_PROVISION_WATCHER_ROUTE,
+                   [dto_serializers.add_provision_watcher_request(watcher)])
+        if resp and isinstance(resp, list) and resp:
+            return resp[0].get("id")
+        return None
 
     def update_provision_watcher(self, watcher) -> None:
         """Update a ProvisionWatcher (``PATCH /api/v3/provisionwatcher``).
