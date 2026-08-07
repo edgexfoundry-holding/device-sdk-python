@@ -23,6 +23,7 @@ import logging
 import os
 import queue
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
@@ -42,6 +43,7 @@ from ..internal.cache import (
 from ..internal.common.utils import (
     KIND_CONTRACT_INVALID,
     KIND_ENTITY_DOES_NOT_EXIST,
+    KIND_SERVER_ERROR,
     EdgexError,
     EdgexErrorKind,
     create_edgx_error,
@@ -157,6 +159,13 @@ class DeviceService(DeviceServiceSDK):
 
         #: The lazily imported AutoEvent manager (see `_auto_event_manager`).
         self._auto_event_manager_instance: Any = None
+
+        #: The lazily created Core Metadata client (see `_metadata_client`).
+        self._metadata_client_instance: Optional[MetadataClient] = None
+        #: Bounded executor that runs the Core Metadata write-back calls off the caller's
+        #: thread so the HTTP I/O never blocks the command controller / caller directly.
+        #: Created lazily by `_run_metadata` and shut down in `_shutdown`.
+        self._metadata_executor: Optional[ThreadPoolExecutor] = None
 
     # -- Device management ---------------------------------------------------
 
@@ -352,7 +361,7 @@ class DeviceService(DeviceServiceSDK):
         """Add a new DeviceProfile to the Device Service and Core Metadata.
 
         In
-On success the Profile is also added to the profile cache.
+        On success the Profile is also added to the profile cache.
 
         Returns:
             The new DeviceProfile id.
@@ -367,9 +376,7 @@ On success the Profile is also added to the profile cache.
                 f"name conflicted, Profile {profile.name} exists")
 
         self._logger.debug("Adding managed Profile %s", profile.name)
-        profile_id = self._add_profile_to_metadata(profile)
-        Profiles().add(profile)
-        return profile_id
+        return self._add_profile_to_metadata(profile)
 
     def device_profiles(self) -> List["DeviceProfile"]:
         """Return all managed DeviceProfiles from cache.
@@ -430,7 +437,6 @@ The cache copy is not updated
 
         self._logger.debug("Removing managed Profile %s", profile.name)
         self._delete_profile_from_metadata(name)
-        Profiles().remove_by_name(name)
 
     # -- Provision Watcher management ------------------------------------------
 
@@ -781,11 +787,49 @@ talks to Core Metadata to self-register and provision its resources. The base UR
         base_url = self._metadata_base_url()
         if not base_url:
             return None
-        if getattr(self, "_metadata_client_instance", None) is None:
+        if self._metadata_client_instance is None:
             self._metadata_client_instance = MetadataClient(
                 base_url=base_url, logger=self._logger)
             self._logger.debug("Core Metadata client configured at %s", base_url)
         return self._metadata_client_instance
+
+    def _run_metadata(self, fn: Callable[[], Any]) -> Any:
+        """Run a Core Metadata write-back call and wait for its result.
+
+        The write runs on the bounded `_metadata_executor` so the HTTP I/O happens off the
+        caller's thread, but the result (and any `MetadataError`) is surfaced synchronously
+        so the caller can roll its local caches back on failure. When Core Metadata is not
+        configured the operation is skipped and ``None`` returned.
+        """
+        client = self._metadata_client()
+        if client is None:
+            return None
+        if self._metadata_executor is None:
+            self._metadata_executor = ThreadPoolExecutor(
+                max_workers=4, thread_name_prefix="metadata")
+        return self._metadata_executor.submit(fn).result()
+
+    def _validate_device(self, device: Device, bypass_validation: bool) -> None:
+        """Run the ProtocolDriver's in-process device validation when required.
+
+        Mirrors the Core Metadata validation round-trip (which would otherwise block on
+        the message-bus subscription) with a direct ``driver.validate_device`` call. Any
+        exception from the driver aborts the operation before the cache / metadata write.
+        """
+        if bypass_validation:
+            self._logger.debug("Skipping device validation for %s (bypassValidation)",
+                               device.name)
+            return
+        self._logger.debug("Validating Device %s", device.name)
+        validate_device = getattr(self.driver, "validate_device", None)
+        if validate_device is None:
+            return
+        try:
+            validate_device(device)
+        except Exception as exc: # pylint: disable=broad-except
+            message = f"device validation failed for {device.name}: {exc}"
+            self._logger.error(message)
+            raise create_edgx_error(KIND_SERVER_ERROR, message) from exc
 
     def _register_resources_to_metadata(self, profiles: List[Any],
                                         devices: List[Any],
@@ -1108,6 +1152,9 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
                   self._command_sub_thread, self._system_events_thread):
             if t is not None and t.is_alive():
                 t.join(timeout=2.0)
+        if self._metadata_executor is not None:
+            self._metadata_executor.shutdown(wait=False, cancel_futures=True)
+            self._metadata_executor = None
         if self._messaging_client is not None:
             try:
                 self._messaging_client.disconnect()
@@ -1655,124 +1702,221 @@ Stores the custom configuration so it can be included in the /config
     # -- internal helpers --------------------------------------------------------
 
     def _add_device_to_metadata(self, device: Device, bypass_validation: bool) -> str:
-        """Add the Device to Core Metadata via the metadata client and return its new id.
+        """Add the Device to the local cache first, then Core Metadata.
 
-        After a successful Core Metadata write the Device is refreshed into the local
-        cache. Until the app-functions-sdk-python metadata client is wired, the local
-        cache is updated directly so the service is usable in-process; the metadata side
-        is logged as a TODO.
+        Cache-first: the Device is validated (unless bypassed) and cached before the Core
+        Metadata write. On a metadata failure the cache entry is rolled back and the error
+        is propagated as an `EdgexError` (KindServerError) so the caller sees the write
+        did not succeed.
         """
-        self._logger.debug("TODO: adding Device %s to Core Metadata "
-                           "(bypassValidation=%s)", device.name, bypass_validation)
+        self._validate_device(device, bypass_validation)
         if not device.id:
             device.id = make_uid()
         if not device.service_name:
             device.service_name = self.service_key
         Devices().add(device)
+        try:
+            client = self._metadata_client()
+            if client is None:
+                return device.id
+            new_id = client.add_device(device, bypass_validation=bypass_validation)
+            if new_id:
+                device.id = new_id
+        except MetadataError as exc:
+            Devices().remove_by_name(device.name)
+            message = f"failed to add Device {device.name} to Core Metadata: {exc}"
+            self._logger.error(message)
+            raise create_edgx_error(KIND_SERVER_ERROR, message) from exc
         return device.id
 
     def _patch_device_in_metadata(self, name: str, updates: Dict[str, Any],
                                   bypass_validation: bool) -> None:
-        """Patch the Device in Core Metadata with the given update map.
+        """Patch the Device in Core Metadata, refreshing the local cache first.
 
-        After a successful Core Metadata patch the local cache is refreshed. Until the
-        metadata client is wired, the cached Device is updated directly so reads remain
-        consistent; the metadata side is logged as a TODO.
+        Cache-first: the update map is applied to the cached Device (and validated unless
+        bypassed) before the Core Metadata patch. On a metadata failure the cached Device
+        is restored from a snapshot and the error is propagated as an `EdgexError`.
         """
-        self._logger.debug("TODO: patching Device %s in Core Metadata "
-                           "(bypassValidation=%s): %s", name, bypass_validation, updates)
         device, ok = Devices().for_name(name)
         if not ok:
             self._logger.debug("Device %s not in cache during metadata patch; skipping "
                                "cache refresh", name)
             return
+        snapshot = device.clone()
         for key, value in updates.items():
             if value is None:
                 continue
             if hasattr(device, key):
                 setattr(device, key, value)
+        self._validate_device(device, bypass_validation)
         Devices().update(device)
+        try:
+            client = self._metadata_client()
+            if client is None:
+                return
+            client.patch_device(name, updates, bypass_validation=bypass_validation)
+        except MetadataError as exc:
+            Devices().update(snapshot)
+            message = f"failed to patch Device {name} in Core Metadata: {exc}"
+            self._logger.error(message)
+            raise create_edgx_error(KIND_SERVER_ERROR, message) from exc
 
     def _delete_device_from_metadata(self, name: str) -> None:
-        """Delete the Device from Core Metadata.
+        """Delete the Device from Core Metadata, removing the local cache entry first.
 
-        After a successful Core Metadata delete the local cache entry is removed. Until
-        the metadata client is wired, the cache is updated directly; the metadata side is
-        logged as a TODO.
+        Cache-first: the cache entry is removed before the Core Metadata delete. On a
+        metadata failure the cache entry is restored and the error is propagated as an
+        `EdgexError`.
         """
-        self._logger.debug("TODO: deleting Device %s from Core Metadata", name)
+        device, ok = Devices().for_name(name)
+        if not ok:
+            return
         Devices().remove_by_name(name)
+        try:
+            client = self._metadata_client()
+            if client is None:
+                return
+            client.delete_device(name)
+        except MetadataError as exc:
+            Devices().add(device)
+            message = f"failed to delete Device {name} from Core Metadata: {exc}"
+            self._logger.error(message)
+            raise create_edgx_error(KIND_SERVER_ERROR, message) from exc
 
     def _add_profile_to_metadata(self, profile: DeviceProfile) -> str:
-        """Add the DeviceProfile to Core Metadata via the metadata client and return its
-        new id.
+        """Add the DeviceProfile to the local cache first, then Core Metadata.
 
-        After a successful Core Metadata write the Profile is refreshed into the local
-        cache. Until the metadata client is wired, the local cache is updated directly so
-        the service is usable in-process; the metadata side is logged as a TODO.
+        On a metadata failure the cache entry is rolled back and the error is propagated
+        as an `EdgexError`. The returned id is the one assigned by Core Metadata (a
+        generated UUID when Core Metadata is not configured).
         """
-        self._logger.debug("TODO: adding Profile %s to Core Metadata", profile.name)
         if not profile.id:
             profile.id = make_uid()
-        # NOTE: add_device_profile() refreshes the cache itself, so this stub only
-        # generates the id.
+        Profiles().add(profile)
+        try:
+            client = self._metadata_client()
+            if client is None:
+                return profile.id
+            new_id = client.add_device_profile(profile)
+            if new_id:
+                profile.id = new_id
+        except MetadataError as exc:
+            Profiles().remove_by_name(profile.name)
+            message = f"failed to add Profile {profile.name} to Core Metadata: {exc}"
+            self._logger.error(message)
+            raise create_edgx_error(KIND_SERVER_ERROR, message) from exc
         return profile.id
 
     def _update_profile_in_metadata(self, profile: DeviceProfile) -> None:
-        """Update the DeviceProfile in Core Metadata.
+        """Update the DeviceProfile in Core Metadata, refreshing the local cache first.
 
-        After a successful Core Metadata update the local cache is refreshed. Until the
-        metadata client is wired, the cached Profile is updated directly; the metadata
-        side is logged as a TODO.
+        On a metadata failure the cached Profile is restored from a snapshot and the error
+        is propagated as an `EdgexError`.
         """
-        self._logger.debug("TODO: updating Profile %s in Core Metadata", profile.name)
+        snapshot, ok = Profiles().for_name(profile.name)
+        if not ok:
+            return
         Profiles().update(profile)
+        try:
+            client = self._metadata_client()
+            if client is None:
+                return
+            client.update_device_profile(profile)
+        except MetadataError as exc:
+            Profiles().update(snapshot)
+            message = f"failed to update Profile {profile.name} in Core Metadata: {exc}"
+            self._logger.error(message)
+            raise create_edgx_error(KIND_SERVER_ERROR, message) from exc
 
     def _delete_profile_from_metadata(self, name: str) -> None:
-        """Delete the DeviceProfile from Core Metadata.
+        """Delete the DeviceProfile from Core Metadata, removing the cache entry first.
 
-        TODO: wire the app-functions-sdk-python metadata client
-(`device_profile_client.delete_by_name(name)`). Until then the call is only
-        logged.
+        On a metadata failure the cache entry is restored and the error is propagated as
+        an `EdgexError`.
         """
-        self._logger.debug("TODO: deleting Profile %s from Core Metadata", name)
+        profile, ok = Profiles().for_name(name)
+        if not ok:
+            return
+        Profiles().remove_by_name(name)
+        try:
+            client = self._metadata_client()
+            if client is None:
+                return
+            client.delete_device_profile(name)
+        except MetadataError as exc:
+            Profiles().add(profile)
+            message = f"failed to delete Profile {name} from Core Metadata: {exc}"
+            self._logger.error(message)
+            raise create_edgx_error(KIND_SERVER_ERROR, message) from exc
 
     def _add_provision_watcher_to_metadata(self, watcher: ProvisionWatcher) -> str:
-        """Add the ProvisionWatcher to Core Metadata via the metadata client and return
-        its new id.
+        """Add the ProvisionWatcher to the local cache first, then Core Metadata.
 
-        TODO: wire the app-functions-sdk-python metadata client
-(`provision_watcher_client.add(...)`). Until then a generated UUID is returned
-        and the call is only logged.
+        On a metadata failure the cache entry is rolled back and the error is propagated
+        as an `EdgexError`. The returned id is the one assigned by Core Metadata.
         """
-        self._logger.debug("TODO: adding ProvisionWatcher %s to Core Metadata",
-                           watcher.name)
         if not watcher.id:
             watcher.id = make_uid()
         if not watcher.service_name:
             watcher.service_name = self.service_key
         ProvisionWatchers().add(watcher)
+        try:
+            client = self._metadata_client()
+            if client is None:
+                return watcher.id
+            new_id = client.add_provision_watcher(watcher)
+            if new_id:
+                watcher.id = new_id
+        except MetadataError as exc:
+            ProvisionWatchers().remove_by_name(watcher.name)
+            message = (f"failed to add ProvisionWatcher {watcher.name} "
+                       f"to Core Metadata: {exc}")
+            self._logger.error(message)
+            raise create_edgx_error(KIND_SERVER_ERROR, message) from exc
         return watcher.id
 
     def _update_provision_watcher_in_metadata(self, watcher: ProvisionWatcher) -> None:
-        """Update the ProvisionWatcher in Core Metadata.
+        """Update the ProvisionWatcher in Core Metadata, refreshing the local cache first.
 
-        TODO: wire the app-functions-sdk-python metadata client
-(`provision_watcher_client.update(...)`). Until then the caller is notified.
+        On a metadata failure the cached Watcher is restored from a snapshot and the error
+        is propagated as an `EdgexError`.
         """
-        self._logger.debug("TODO: updating ProvisionWatcher %s in Core Metadata",
-                           watcher.name)
+        snapshot, ok = ProvisionWatchers().for_name(watcher.name)
+        if not ok:
+            return
         ProvisionWatchers().update(watcher)
+        try:
+            client = self._metadata_client()
+            if client is None:
+                return
+            client.update_provision_watcher(watcher)
+        except MetadataError as exc:
+            ProvisionWatchers().update(snapshot)
+            message = (f"failed to update ProvisionWatcher {watcher.name} "
+                       f"in Core Metadata: {exc}")
+            self._logger.error(message)
+            raise create_edgx_error(KIND_SERVER_ERROR, message) from exc
 
     def _delete_provision_watcher_from_metadata(self, name: str) -> None:
-        """Delete the ProvisionWatcher from Core Metadata.
+        """Delete the ProvisionWatcher from Core Metadata, removing the cache first.
 
-        TODO: wire the app-functions-sdk-python metadata client
-(`provision_watcher_client.delete_by_name(name)`). Until then the call is only
-        logged.
+        On a metadata failure the cache entry is restored and the error is propagated as
+        an `EdgexError`.
         """
-        self._logger.debug("TODO: deleting ProvisionWatcher %s from Core Metadata", name)
+        watcher, ok = ProvisionWatchers().for_name(name)
+        if not ok:
+            return
         ProvisionWatchers().remove_by_name(name)
+        try:
+            client = self._metadata_client()
+            if client is None:
+                return
+            client.delete_provision_watcher(name)
+        except MetadataError as exc:
+            ProvisionWatchers().add(watcher)
+            message = f"failed to delete ProvisionWatcher {name} from Core Metadata: {exc}"
+            self._logger.error(message)
+            raise create_edgx_error(KIND_SERVER_ERROR, message) from exc
 
     def _start_auto_events(self) -> None:
         """Start the AutoEvent manager.

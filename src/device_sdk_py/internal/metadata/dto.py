@@ -182,6 +182,40 @@ def add_device_request(device: Device) -> Dict[str, Any]:
     return _request({"device": device_to_dto(device)})
 
 
+#: snake_case attribute -> camelCase wire field for the Device update DTO. Only these
+#: fields are patched through `update_device_request`; anything else (id, created, ...) is
+#: Core Metadata managed.
+_DEVICE_UPDATE_FIELDS = {
+    "description": "description",
+    "admin_state": "adminState",
+    "operating_state": "operatingState",
+    "service_name": "serviceName",
+    "profile_name": "profileName",
+    "labels": "labels",
+    "location": "location",
+    "auto_events": "autoEvents",
+    "protocols": "protocols",
+    "tags": "tags",
+    "properties": "properties",
+}
+
+
+def update_device_request(name: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a Core UpdateDevice request (``PATCH /api/v3/device``).
+
+    The Device ``name`` is required and the ``updates`` map is serialized through
+    `_DEVICE_UPDATE_FIELDS` (snake_case -> camelCase); None values and unknown keys are
+    dropped so only the fields the caller wants changed are sent.
+    """
+    dto: Dict[str, Any] = {"name": name}
+    for key, value in updates.items():
+        field = _DEVICE_UPDATE_FIELDS.get(key)
+        if field is None or value is None:
+            continue
+        dto[field] = value
+    return _request({"device": dto})
+
+
 def device_service_to_dto(name: str, base_address: str, admin_state: str,
                           labels: List[str], properties: Dict[str, Any]) -> Dict[str, Any]:
     """Serialize a DeviceService onto Core Metadata (``dtos.DeviceService``).
@@ -241,3 +275,27 @@ Mirrors ``dtos.ProvisionWatcher``. Since EdgeX 4.0 the ProvisionWatcher carries 
 def add_provision_watcher_request(watcher: ProvisionWatcher) -> Dict[str, Any]:
     """Build the Core ProvisionWatcher request ``{"provisionwatcher": {...}}``."""
     return _request({"provisionwatcher": provision_watcher_to_dto(watcher)})
+
+
+def update_provision_watcher_request(watcher: ProvisionWatcher) -> Dict[str, Any]:
+    """Build a Core UpdateProvisionWatcher request (``PATCH /api/v3/provisionwatcher``).
+
+    Only the updateable fields are included (the ``discoveredDevice`` child is omitted
+    here - it is only set on add). ``blockingIdentifiers`` is sent as a map of
+    identifier -> list of values.
+    """
+    dto: Dict[str, Any] = {"name": watcher.name}
+    if watcher.description:
+        dto["description"] = watcher.description
+    if watcher.labels:
+        dto["labels"] = list(watcher.labels)
+    if watcher.identifiers:
+        dto["identifiers"] = dict(watcher.identifiers)
+    if watcher.blocking_identifiers:
+        dto["blockingIdentifiers"] = {
+            k: list(v) for k, v in watcher.blocking_identifiers.items()}
+    if watcher.admin_state:
+        dto["adminState"] = str(watcher.admin_state)
+    if watcher.profile_name:
+        dto["profileName"] = watcher.profile_name
+    return _request({"provisionwatcher": dto})
