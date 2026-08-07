@@ -1259,8 +1259,11 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
     def _process_discovered_devices(self, devices: List[DiscoveredDevice]) -> None:
         """Match discovered devices against ProvisionWatchers and register via Core Metadata.
 
-        Currently uses local cache only since
-        MetadataClient add_device is a placeholder (TODO: wire real client).
+        For each discovered device that matches an unlocked ProvisionWatcher, a Device
+        is created and registered with Core Metadata using bypassValidation=true (the
+        Device Service's validation subscription is not yet ported). The local cache is
+        updated first, then the metadata write is propagated; on failure the cache is
+        rolled back.
         """
         watchers = ProvisionWatchers().all()
         if not watchers:
@@ -1288,9 +1291,12 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
                         auto_events=pw.discovered_device.auto_events,
                         properties=pw.discovered_device.properties,
                     )
-                    # TODO: call MetadataClient.add_device(bypass_validation=True) when available
-                    # For now, add to local cache so the service can serve it
-                    Devices().add(device)
+                    # Register with Core Metadata using bypassValidation=true
+                    try:
+                        self.add_device_without_validation(device)
+                    except Exception as exc:  # pylint: disable=broad-except
+                        self._logger.error("Failed to add discovered device %s: %s", d.name, exc)
+                        break
                     # Publish system event for discovery progress
                     self._publish_discovery_progress(100, 1, f"Discovered device {d.name} added")
                     break

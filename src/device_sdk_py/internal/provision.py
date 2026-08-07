@@ -37,6 +37,7 @@ from .cache import (
     DeviceProfile,
     DeviceResource,
     ProvisionWatcher,
+    ProvisionWatcherDiscoveredDevice,
     ResourceOperation,
     ResourceProperties,
 )
@@ -225,6 +226,8 @@ def _build_device(d: Dict[str, Any]) -> Device:
 
 def _build_provision_watcher(d: Dict[str, Any]) -> ProvisionWatcher:
     d = d or {}
+    from .cache import ProvisionWatcherDiscoveredDevice, AutoEvent, ProtocolProperties
+    discovered = d.get("discoveredDevice", {})
     return ProvisionWatcher(
         id=_as_str(d.get("id")),
         name=_as_str(d.get("name")),
@@ -235,6 +238,18 @@ def _build_provision_watcher(d: Dict[str, Any]) -> ProvisionWatcher:
         blocking_identifiers=_as_str_map_of_lists(d.get("blockingIdentifiers")),
         admin_state=_as_str(d.get("adminState", ADMIN_STATE_UNLOCKED)),
         profile_name=_as_str(d.get("profileName")),
+        discovered_device=ProvisionWatcherDiscoveredDevice(
+            profile_name=_as_str(discovered.get("profileName")),
+            admin_state=_as_str(discovered.get("adminState", "UNLOCKED")),
+            labels=_as_str_list(discovered.get("labels")),
+            auto_events=[AutoEvent(
+                source_name=_as_str(ae.get("sourceName")),
+                on_change=_as_bool(ae.get("onChange")),
+                on_change_threshold=_as_str(ae.get("onChangeThreshold")),
+                interval=_as_str(ae.get("interval")),
+            ) for ae in discovered.get("autoEvents", [])],
+            properties=_as_raw_map(discovered.get("properties")),
+        ),
     )
 
 

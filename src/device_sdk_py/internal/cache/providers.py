@@ -298,6 +298,21 @@ Aligned to `models.DeviceProfile` in deviceprofile.go. The caches store these ob
 
 
 @dataclass
+class ProvisionWatcherDiscoveredDevice:
+    """Configuration for devices created from this ProvisionWatcher.
+
+    Mirrors the ``DiscoveredDevice`` child object in the EdgeX ProvisionWatcher contract.
+    Specifies the profile, admin state, auto events, and properties applied to
+    devices created when a discovered device matches this watcher.
+    """
+    profile_name: str = ""
+    admin_state: str = "UNLOCKED"
+    labels: List[str] = field(default_factory=list)
+    auto_events: List[AutoEvent] = field(default_factory=list)
+    properties: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class ProvisionWatcher:
     """A ProvisionWatcher used to automatically provision discovered Devices.
 
@@ -326,6 +341,7 @@ Aligned to `models.ProvisionWatcher` in provisionwatcher.go. The caches store th
     blocking_identifiers: Dict[str, List[str]] = field(default_factory=dict)
     admin_state: AdminState = ADMIN_STATE_UNLOCKED
     profile_name: str = ""
+    discovered_device: ProvisionWatcherDiscoveredDevice = field(default_factory=ProvisionWatcherDiscoveredDevice)
     created: int = 0
     modified: int = 0
 
