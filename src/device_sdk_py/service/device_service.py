@@ -1167,6 +1167,13 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
     def _shutdown(self) -> None:
         """Signal background pumps/subscriptions to stop and cleanup."""
         self._shutdown_event.set()
+        # Stop config watch threads
+        if hasattr(self, "_config_watch_stop"):
+            for section_name, stop_event in self._config_watch_stop.items():
+                stop_event.set()
+            for section_name, thread in self._config_watch_threads.items():
+                if thread.is_alive():
+                    thread.join(timeout=2.0)
         for t in (self._async_pump_thread, self._discovered_pump_thread,
                   self._command_sub_thread, self._system_events_thread,
                   self._device_return_thread):
@@ -1810,21 +1817,105 @@ Stores the custom configuration so it can be included in the /config
 
     def listen_for_custom_config_changes(self, config_to_watch: Any, section_name: str,
                                          changed_callback: Callable[[Any], None]) -> None:
-        """Listen for changes to the specified custom configuration section.
-        `load_custom_config` must have been called previously.
+        """Listen for changes to the specified custom configuration section via file mtime polling.
 
-        The Configuration Provider watcher is not wired yet, so only the precondition is
-        enforced.
+        `load_custom_config` must have been called previously. The `config_to_watch` object
+        must have a `custom_config_path` attribute pointing to the YAML file to watch.
+
+        A background thread polls the file's modification time at a fixed interval.
+        When the mtime changes, the file is re-parsed as YAML and the `changed_callback`
+        is invoked with the new parsed configuration object.
 
         Raises:
             RuntimeError: When `load_custom_config` has not been called for this section.
+            AttributeError: When `config_to_watch` does not have `custom_config_path`.
         """
         if not self._custom_config_loaded:
             raise RuntimeError(
                 f"custom configuration must be loaded before '{section_name}' section "
                 f"can be watched for changes")
-        self._logger.debug("TODO: listening for changes to custom configuration section "
-                           "%s; changedCallback will be invoked by the config processor",
+        if not hasattr(config_to_watch, "custom_config_path"):
+            raise AttributeError(
+                "config_to_watch must have 'custom_config_path' attribute pointing to the YAML file")
+
+        config_path = config_to_watch.custom_config_path
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Custom config file not found: {config_path}")
+
+        # Track watched sections to support multiple sections
+        if not hasattr(self, "_config_watch_threads"):
+            self._config_watch_threads: Dict[str, threading.Thread] = {}
+            self._config_watch_stop: Dict[str, threading.Event] = {}
+
+        if section_name in self._config_watch_threads:
+            self._logger.warning("Already watching section '%s'; replacing", section_name)
+            self._config_watch_stop[section_name].set()
+            self._config_watch_threads[section_name].join(timeout=2.0)
+
+        stop_event = threading.Event()
+        self._config_watch_stop[section_name] = stop_event
+
+        # Get initial mtime
+        last_mtime = [os.path.getmtime(config_path)]
+
+        def watch_loop():
+            self._logger.info("Started file mtime watch for config section '%s' (%s)",
+                              section_name, config_path)
+            # Initial check
+            try:
+                current_mtime = os.path.getmtime(config_path)
+                if current_mtime != last_mtime[0]:
+                    self._logger.info("Config file %s changed (mtime %s -> %s), reloading",
+                                      config_path, last_mtime[0], current_mtime)
+                    last_mtime[0] = current_mtime
+                    # Re-parse the YAML file
+                    try:
+                        import yaml
+                        with open(config_path, "r", encoding="utf-8") as f:
+                            new_config = yaml.safe_load(f) or {}
+                    except Exception as exc:  # pylint: disable=broad-except
+                        self._logger.error("Failed to parse updated config %s: %s",
+                                           config_path, exc)
+                    else:
+                        # Invoke the callback with the new parsed config
+                        try:
+                            changed_callback(new_config)
+                        except Exception as exc:  # pylint: disable=broad-except
+                            self._logger.error("Config change callback failed: %s", exc)
+            except Exception as exc:  # pylint: disable=broad-except
+                self._logger.error("Config watch error for %s: %s", config_path, exc)
+
+            while not stop_event.is_set():
+                try:
+                    current_mtime = os.path.getmtime(config_path)
+                    if current_mtime != last_mtime[0]:
+                        self._logger.info("Config file %s changed (mtime %s -> %s), reloading",
+                                          config_path, last_mtime[0], current_mtime)
+                        last_mtime[0] = current_mtime
+                        # Re-parse the YAML file
+                        try:
+                            import yaml
+                            with open(config_path, "r", encoding="utf-8") as f:
+                                new_config = yaml.safe_load(f) or {}
+                        except Exception as exc:  # pylint: disable=broad-except
+                            self._logger.error("Failed to parse updated config %s: %s",
+                                               config_path, exc)
+                            continue
+                        # Invoke the callback with the new parsed config
+                        try:
+                            changed_callback(new_config)
+                        except Exception as exc:  # pylint: disable=broad-except
+                            self._logger.error("Config change callback failed: %s", exc)
+                except Exception as exc:  # pylint: disable=broad-except
+                    self._logger.error("Config watch error for %s: %s", config_path, exc)
+                # Poll every 2 seconds
+                stop_event.wait(timeout=2.0)
+            self._logger.info("Stopped file mtime watch for config section '%s'", section_name)
+
+        thread = threading.Thread(target=watch_loop, daemon=True, name=f"config-watch-{section_name}")
+        self._config_watch_threads[section_name] = thread
+        thread.start()
+        self._logger.debug("Listening for changes to custom configuration section '%s'",
                            section_name)
 
     def logging_client(self) -> Logger:
