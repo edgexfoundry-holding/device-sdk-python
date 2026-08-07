@@ -1785,36 +1785,48 @@ Stores the custom configuration so it can be included in the /config
         """
         return None
 
-    # -- System events ------------------------------------------------------------
+# -- System events ------------------------------------------------------------
 
     def publish_device_discovery_progress_system_event(self, progress: int,
-                                                       discovered_device_count: int,
-                                                       message: str) -> None:
+                                                        discovered_device_count: int,
+                                                        message: str) -> None:
         """Publish a device discovery progress system event through the EdgeX message bus.
 
-        Only logged for now; the MessageBus publishing is ported in a later phase.
+        Delegates to the internal progress helper which uses the message bus client.
         """
-        self._logger.info(
-            "Device discovery progress: %s%%, devices discovered: %s, message: %s",
-            progress, discovered_device_count, message)
+        self._publish_discovery_progress(progress, discovered_device_count, message)
 
     def publish_profile_scan_progress_system_event(self, req_id: str, progress: int,
-                                                   message: str) -> None:
+                                                    message: str) -> None:
         """Publish a profile scan progress system event through the EdgeX message bus.
 
-        Only logged for now; the MessageBus publishing is ported in a later phase.
+        Delegates to the internal progress helper which uses the message bus client.
         """
-        self._logger.info("Profile scan progress for request %s: %s%%, message: %s",
-                          req_id, progress, message)
+        self._publish_profile_scan_progress(req_id, progress, message)
 
     def publish_generic_system_event(self, event_type: str, action: str,
-                                     details: Any) -> None:
+                                      details: Any) -> None:
         """Publish a generic system event through the EdgeX message bus.
 
-        Only logged for now; the MessageBus publishing is ported in a later phase.
+        This is a general-purpose method for publishing custom system events.
+        The topic will be: `<baseTopicPrefix>/system-events/<serviceName>/<event_type>/<action>`
         """
-        self._logger.info("System event type: %s, action: %s, details: %s",
-                          event_type, action, details)
+        if self._messaging_client is None or self._message_bus_config_obj is None:
+            self._logger.debug("No messaging client configured; system event %s/%s only logged",
+                               event_type, action)
+            return
+        try:
+            publish_system_event(
+                client=self._messaging_client,
+                service_name=self.name(),
+                event_type=event_type,
+                action=action,
+                details=details,
+                base_topic_prefix=self._message_bus_config_obj.base_topic_prefix,
+                logger=self._logger,
+            )
+        except Exception as exc: # pylint: disable=broad-except
+            self._logger.error("Failed to publish system event %s/%s: %s", event_type, action, exc)
 
     # -- internal helpers --------------------------------------------------------
 
