@@ -2,14 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The CommandValue data model - ported from `device-sdk-go/pkg/models/commandvalue.go`.
 
 `CommandValue` represents the reading value of a Get command coming from ProtocolDrivers
 or the parameter of a Put command sent to ProtocolDrivers. It carries the Device Resource
 name, the declared value type, the raw value, an origin timestamp and optional tags.
 
 This module also defines the EdgeX reading value type constants (`VALUETYPE_*`), a
-`validate()` helper mirroring the Go `validate()` function, and a `ValueTypeError`
+`validate()` helper function, and a `ValueTypeError`
 exception used in place of the Go `(value, error)` return convention.
 """
 
@@ -162,7 +161,6 @@ class CommandValue:
     """The reading value of a Get command coming from ProtocolDrivers, or the
     parameter of a Put command sent to ProtocolDrivers.
 
-    Corresponds to `models.CommandValue` in commandvalue.go.
 
     Attributes:
         device_resource_name: The name of the Device Resource for this command.
@@ -316,7 +314,7 @@ class CommandValue:
     def binary_value(self) -> Optional[bytes]:
         """Return the value as bytes; raises ValueTypeError if the type is not Binary.
 
-        Returns None when the value is None (mirrors the Go `(nil, nil)` behaviour).
+Returns None when the value is None ( behaviour).
         """
         if self.value is None:
             return None
@@ -364,11 +362,10 @@ class CommandValue:
         return self.value
 
 
-def new_command_value(device_resource_name: str, value_type: str, value: Any) -> CommandValue:
+def create_command_value(device_resource_name: str, value_type: str, value: Any) -> CommandValue:
     """Create a CommandValue, validating the value against the supplied value type.
 
-    Python counterpart of `NewCommandValue(deviceResourceName, valueType, value)` in
-    commandvalue.go. Validation failure raises `ValueTypeError` instead of returning
+    Validation failure raises `ValueTypeError` instead of returning
     an error tuple.
     """
     return CommandValue(device_resource_name=device_resource_name,
@@ -376,17 +373,13 @@ def new_command_value(device_resource_name: str, value_type: str, value: Any) ->
                         value=value)
 
 
-def new_command_value_with_origin(device_resource_name: str, value_type: str,
+def create_command_value_with_origin(device_resource_name: str, value_type: str,
                                   value: Any, origin: int) -> CommandValue:
     """Create a CommandValue with the Origin field set.
 
-    Python counterpart of `NewCommandValueWithOrigin` in commandvalue.go.
     """
-    command_value = new_command_value(device_resource_name, value_type, value)
+    command_value = create_command_value(device_resource_name, value_type, value)
     command_value.origin = origin
     return command_value
 
 
-# PascalCase aliases kept for parity with the Go exported constructors.
-NewCommandValue = new_command_value
-NewCommandValueWithOrigin = new_command_value_with_origin

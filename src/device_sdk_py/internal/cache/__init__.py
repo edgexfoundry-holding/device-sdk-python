@@ -2,10 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The internal caches of the EdgeX Device Service SDK - ported from
-`device-sdk-go/internal/cache`.
-
-Exports:
+The internal caches of the EdgeX Device Service SDK - Exports:
     DeviceCache / Devices(): The thread-safe cache of Devices (keyed by name).
     DeviceProfileCache / Profiles(): The thread-safe cache of DeviceProfiles with
         DeviceResource / DeviceCommand / ResourceOperation lookup.
@@ -14,21 +11,19 @@ Exports:
     The cache data models (Device, DeviceProfile, DeviceResource, ResourceProperties,
         ResourceOperation, DeviceCommand, ProvisionWatcher, AdminState, AutoEvent,
         ProtocolProperties).
-    CacheError / CacheErrorKind / new_cache_error: The cache error types.
+    CacheError / CacheErrorKind / create_cache_error: The cache error types.
 """
 
 from .devices import (
     Devices,
-    NewDeviceCache,
     DeviceCache,
     check_profile_not_used,
-    new_device_cache,
+    create_device_cache,
 )
 from .profiles import (
-    NewProfileCache,
     Profiles,
     DeviceProfileCache,
-    new_profile_cache,
+    create_profile_cache,
 )
 from .providers import (
     ADMIN_STATE_LOCKED,
@@ -45,13 +40,12 @@ from .providers import (
     ProvisionWatcher,
     ResourceOperation,
     ResourceProperties,
-    new_cache_error,
+    create_cache_error,
 )
 from .provisionwatchers import (
-    NewProvisionWatcherCache,
     ProvisionWatchers,
     ProvisionWatcherCache,
-    new_provision_watcher_cache,
+    create_provision_watcher_cache,
 )
 
 __all__ = [
@@ -61,12 +55,9 @@ __all__ = [
     "DeviceCache",
     "DeviceProfileCache",
     "ProvisionWatcherCache",
-    "NewDeviceCache",
-    "NewProfileCache",
-    "NewProvisionWatcherCache",
-    "new_device_cache",
-    "new_profile_cache",
-    "new_provision_watcher_cache",
+    "create_device_cache",
+    "create_profile_cache",
+    "create_provision_watcher_cache",
     "check_profile_not_used",
     "AdminState",
     "ADMIN_STATE_LOCKED",
@@ -82,5 +73,5 @@ __all__ = [
     "ProtocolProperties",
     "CacheError",
     "CacheErrorKind",
-    "new_cache_error",
+    "create_cache_error",
 ]

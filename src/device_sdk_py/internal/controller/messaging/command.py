@@ -1,7 +1,6 @@
 # Copyright (C) 2026 YIQISOFT
 # SPDX-License-Identifier: Apache-2.0
 """
-Command request subscription - ported from
 `device-sdk-go/internal/controller/messaging/command.go` (`SubscribeCommands`).
 
 Subscribes to `<basePrefix>/command/request/<serviceName>/#`, parses device/command/method
@@ -89,7 +88,6 @@ def _build_response_topic(
 def _filter_query_params(query_params: Dict[str, str]) -> tuple[str, Dict[str, bool]]:
     """
     Filter SDK reserved query parameters from the command request.
-    Mirrors Go `filterQueryParams` in command.go.
     """
     raw_parts: List[str] = []
     reserved: Dict[str, bool] = {
@@ -149,7 +147,7 @@ def subscribe_commands(
     response_topic_prefix = f"{base_topic_prefix}/{RESPONSE_TOPIC}/{service_name}"
     log.info("Responses to command requests will be published on topic: %s/<requestId>", response_topic_prefix)
 
-    msg_queue: "queue.Queue[MessageEnvelope]" = __import__("queue").Queue()
+    msg_queue: "queue.Queue[MessageEnvelope]" = __import__("queue").Queue(maxsize=max_concurrent)
     err_queue: "queue.Queue[str]" = __import__("queue").Queue()
 
     topic_queue = TopicMessageQueue(topic=request_topic, message_queue=msg_queue)

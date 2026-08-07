@@ -2,11 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The CommandValues to Event transformation - ported from
 `device-sdk-go/internal/transformer/transform.go`.
 
 `command_values_to_event` converts a list of CommandValues produced by a ProtocolDriver into
-an `Event`.  For each CommandValue it applies the outgoing data transformation (Mask /
+an `Event`. For each CommandValue it applies the outgoing data transformation (Mask /
 Shift / Base / Scale / Offset), the assertion check and the ResourceOperation mapping, and
 then converts the value into a `Reading` (binary / object / simple) tagged with a unique
 origin timestamp.
@@ -37,7 +36,7 @@ from ...models import (
     VALUETYPE_OBJECT_ARRAY,
     VALUETYPE_STRING,
     CommandValue,
-    new_command_value,
+    create_command_value,
 )
 from .transformresult import (
     NAN,
@@ -52,7 +51,7 @@ from .transformresult import (
 )
 
 #: The module-level previous origin used to guarantee strictly increasing unique origins
-#: (Go `previousOrigin` / `originMutex` in transform.go).
+#:.
 _previous_origin: int = 0
 _origin_mutex = threading.Lock()
 
@@ -60,7 +59,7 @@ _origin_mutex = threading.Lock()
 def get_unique_origin() -> int:
     """Return a strictly increasing timestamp in nanoseconds.
 
-    Mirrors `getUniqueOrigin()` in transform.go.  Guarantees that two events created in the
+    Guarantees that two events created in the
     same nanosecond get distinct origins.
     """
     global _previous_origin
@@ -86,7 +85,7 @@ def _format_float32(value: float) -> str:
 def _reading_value_string(cv: CommandValue) -> str:
     """Return the string form of the value stored in a simple reading.
 
-    Mirrors the Go `fmt.Sprintf("%v", cv.Value)` used by `dtos.NewSimpleReading`.  Float32
+Mirrors the Go `fmt.Sprintf("%v", cv.Value)` used by `dtos.NewSimpleReading`. Float32
     values are formatted with the shortest float32 representation to match Go's default
     formatting.
     """
@@ -153,9 +152,9 @@ def command_value_to_reading(cv: CommandValue, device_name: str, profile_name: s
                              media_type: str, event_origin: int) -> Reading:
     """Convert a CommandValue to a Reading.
 
-    Mirrors `commandValueToReading()` in transform.go.  A `None` value produces a null
+    A `None` value produces a null
     reading, a Binary value a binary reading, an Object / ObjectArray value an object
-    reading and every other value a simple reading.  The reading origin is the CommandValue
+reading and every other value a simple reading. The reading origin is the CommandValue
     origin when it was set by the ProtocolDriver, otherwise the Event origin.
     """
     if cv.value is None:
@@ -214,8 +213,8 @@ def command_values_to_event(cvs: Optional[List[CommandValue]], device_name: str,
                             source_name: str, data_transform: bool = True) -> Optional[Event]:
     """Convert a list of CommandValues into an Event for the given Device.
 
-    Mirrors `CommandValuesToEventDTO()` in transform.go.  Returns None when no readings
-    were produced (an uninitialized or empty reading set).  For each CommandValue the
+    Returns None when no readings
+were produced (an uninitialized or empty reading set). For each CommandValue the
     outgoing data transformation, the assertion check and the ResourceOperation mapping are
     applied; an overflowing or NaN value is replaced by a String reading with the value
     "overflow" / "NaN".
@@ -254,9 +253,9 @@ def command_values_to_event(cvs: Optional[List[CommandValue]], device_name: str,
             try:
                 transform_read_result(cv, dr.properties)
             except OverflowTransformerError:
-                cv = new_command_value(cv.device_resource_name, VALUETYPE_STRING, OVERFLOW)
+                cv = create_command_value(cv.device_resource_name, VALUETYPE_STRING, OVERFLOW)
             except NaNTransformerError:
-                cv = new_command_value(cv.device_resource_name, VALUETYPE_STRING, NAN)
+                cv = create_command_value(cv.device_resource_name, VALUETYPE_STRING, NAN)
             except TransformerError:
                 transforms_ok = False
 
@@ -310,7 +309,3 @@ def command_values_to_event(cvs: Optional[List[CommandValue]], device_name: str,
     return None
 
 
-# PascalCase aliases kept for parity with the Go exported identifiers.
-CommandValuesToEvent = command_values_to_event
-CommandValueToReading = command_value_to_reading
-GetUniqueOrigin = get_unique_origin

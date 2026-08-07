@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The internal implementation of the EdgeX Device Service SDK - ported from
 `device-sdk-go/internal`.
 
 Sub-packages:
@@ -16,6 +15,6 @@ Sub-packages:
     common: The common constants and utility functions.
 """
 
-from . import application, autoevent, cache, common, controller, transformer
+from. import application, autoevent, cache, common, controller, transformer
 
 __all__ = ["cache", "transformer", "autoevent", "application", "controller", "common"]

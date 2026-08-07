@@ -2,11 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The write-parameter (incoming) value transformations - ported from
 `device-sdk-go/internal/transformer/transformparam.go`.
 
 `transform_write_parameter` performs the incoming (write) data transformation on a
-CommandValue using the ResourceProperties of its DeviceResource.  The incoming data
+CommandValue using the ResourceProperties of its DeviceResource. The incoming data
 transformation order (Maximum / Minimum validation, Offset, Scale, Base, Shift, Mask) is
 the reverse of the outgoing order and is defined by the EdgeX Device Service data
 transformation ADR.
@@ -47,7 +46,7 @@ from .transformresult import (
 class WriteParameterError(TransformerError):
     """Raised when a write parameter is out of the allowed Maximum / Minimum range.
 
-    Python counterpart of the `errors.KindContractInvalid` error returned by the Go
+    KindContractInvalid` error returned by the Go
     `validateWriteMaximum` / `validateWriteMinimum` functions.
     """
 
@@ -63,7 +62,7 @@ def _minimum_message(minimum: float) -> str:
 def validate_write_maximum(value: Any, value_type: str, maximum: float) -> None:
     """Raise `WriteParameterError` when the value exceeds the configured maximum.
 
-    Mirrors `validateWriteMaximum(value any, maximum float64)` in transformparam.go.  The
+    The
     maximum is truncated to the value type (Go `uint8(maximum)` / `int8(maximum)` /
     `float32(maximum)`) before comparison.
     """
@@ -81,7 +80,7 @@ def validate_write_maximum(value: Any, value_type: str, maximum: float) -> None:
 def validate_write_minimum(value: Any, value_type: str, minimum: float) -> None:
     """Raise `WriteParameterError` when the value is below the configured minimum.
 
-    Mirrors `validateWriteMinimum(value any, minimum float64)` in transformparam.go.  The
+    The
     minimum is truncated to the value type (Go `uint8(minimum)` / `int8(minimum)` /
     `float32(minimum)`) before comparison.
     """
@@ -99,9 +98,8 @@ def validate_write_minimum(value: Any, value_type: str, minimum: float) -> None:
 def transform_write_parameter(cv: CommandValue, properties: ResourceProperties) -> None:
     """Transform the incoming (write) value of the CommandValue in place.
 
-    Mirrors `TransformWriteParameter(cv *models.CommandValue, pv models.ResourceProperties)`
-    in transformparam.go.  Validates the value against the configured Maximum / Minimum and
-    then applies Offset, Scale, Base, Shift and Mask in that order.  A `None` value or a
+Validates the value against the configured Maximum / Minimum and
+then applies Offset, Scale, Base, Shift and Mask in that order. A `None` value or a
     non-numeric value type is left untouched.
 
     Raises:
@@ -139,5 +137,3 @@ def transform_write_parameter(cv: CommandValue, properties: ResourceProperties) 
         cv.value = new_value
 
 
-# PascalCase aliases kept for parity with the Go exported identifiers.
-TransformWriteParameter = transform_write_parameter

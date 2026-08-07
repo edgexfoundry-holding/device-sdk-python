@@ -7,7 +7,7 @@ its pre-defined Profiles / Devices / Provision Watchers at startup.
 This mirrors the ``app-functions-sdk-python`` metadata clients (`DeviceClient`,
 `DeviceProfileClient`, `DeviceServiceClient`, `ProvisionWatcherClient`) but is self-contained - it
 writes the Core Metadata v3 request envelopes directly rather than depending on the
-``app_functions_sdk_py`` DTOs / request helpers (which are pinned to ``python<3.11``).  It matches
+``app_functions_sdk_py`` DTOs / request helpers (which are pinned to ``python<3.11``). It matches
 the Go ``device-sdk-go`` bootstrap flow: ``selfRegister`` then ``provision.LoadProfiles`` /
 ``LoadDevices`` / ``LoadProvisionWatchers``.
 
@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
-from . import dto as dto_serializers
+from. import dto as dto_serializers
 
 __all__ = ["MetadataError", "MetadataClient"]
 
@@ -159,7 +159,7 @@ class MetadataClient:
     def add_devices(self, devices: List) -> None:
         """Add Devices (``POST /api/v3/device``).
 
-        Devices are added with ``bypassValidation=true``.  In Go the validation round-trip is
+Devices are added with ``bypassValidation=true``. In Go the validation round-trip is
         answered by the Device Service's message-bus subscription
         (``messaging.SubscribeDeviceValidation``); until that port is present, skipping
         validation keeps startup registration working exactly like the Go
@@ -183,6 +183,11 @@ class MetadataClient:
         """Add ProvisionWatchers (``POST /api/v3/provisionwatcher``)."""
         _body = [dto_serializers.add_provision_watcher_request(w) for w in watchers]
         self._post(_API_PROVISION_WATCHER_ROUTE, _body)
+
+    def patch_device(self, name: str, updates: Dict[str, Any]) -> None:
+        """Patch a Device (``PATCH /api/v3/device/name/{name}``)."""
+        _body = _request({"device": updates})
+        self._patch(f"{_API_DEVICE_ROUTE}/{_NAME}/{name}", _body)
 
 
 def client_from_base_url(base_url: str, timeout: float = 10.0,

@@ -2,19 +2,18 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The REST controller / router of the EdgeX Device Service SDK - ported from
 `device-sdk-go/internal/controller/http/restrouter.go`.
 
 `RestController` owns the FastAPI application, registers the SDK reserved routes
 (discovery, profile scan, device command and the common ping / version / config /
 metrics endpoints) and exposes `add_route` for the service-specific routes added by
-`DeviceServiceSDK.add_custom_route`.  Custom routes are rejected when their path matches
-a reserved route, mirroring the Go `reservedRoutes` map.
+`DeviceServiceSDK.add_custom_route`. Custom routes are rejected when their path matches
+a reserved route, map.
 
 The Go controller reads its dependencies (device service, configuration, protocol
-driver, ...) from the DI container; the Python port receives them as constructor
+driver,...) from the DI container; the Python port receives them as constructor
 arguments and holds them as attributes so that the command / discovery handlers (see
-`command.py` / `discovery.py`) can access them.  The handlers are contributed by the
+`command.py` / `discovery.py`) can access them. The handlers are contributed by the
 `CommandController` / `DiscoveryController` mixins, keeping the files aligned with the
 Go layout while staying on a single `RestController` type.
 """
@@ -46,15 +45,15 @@ from ...common.consts import (
     SDK_VERSION,
     SERVICE_VERSION,
 )
-from ...common.utils import EdgexError, new_edgx_error, KIND_SERVER_ERROR
-from ._utils import (
+from ...common.utils import EdgexError, create_edgx_error, KIND_SERVER_ERROR
+from._utils import (
     base_response,
     send_response,
 )
 from .command import CommandController
 from .discovery import DiscoveryController
 
-#: The type of the route authentication hook (a FastAPI dependency).  Mirrors the Go
+#: The type of the route authentication hook (a FastAPI dependency). Mirrors the Go
 #: `authenticationHook` built by `handlers.AutoConfigAuthenticationFunc(dic)`.
 RouteAuthHook = Optional[Callable[..., Any]]
 
@@ -103,7 +102,6 @@ class RestController(DiscoveryController, CommandController):
     def init_rest_routes(self) -> None:
         """Register the SDK reserved routes.
 
-        Mirrors `(c *RestController) InitRestRoutes(dic *di.Container)` in restrouter.go.
         The Go version also registers the common ping / version / metrics / config
         endpoints through the bootstrap common controller; they are registered here since
         the Python SDK has no separate common controller.
@@ -135,7 +133,6 @@ class RestController(DiscoveryController, CommandController):
         """Register a reserved route, marking its path so that custom routes cannot
         override it.
 
-        Mirrors `(c *RestController) addReservedRoute(...)` in restrouter.go.
         """
         self.reserved_routes.add(route)
         self.router.add_api_route(route, handler, methods=methods)
@@ -145,11 +142,11 @@ class RestController(DiscoveryController, CommandController):
         """Register a custom route for the Device Service, rejecting paths reserved by
         the SDK.
 
-        Mirrors `(c *RestController) AddRoute(...)` in restrouter.go; the Go version
+        ; the Go version
         returns an `errors.EdgeX`, the Python port raises `EdgexError` instead.
         """
         if route in self.reserved_routes:
-            raise new_edgx_error(KIND_SERVER_ERROR, "route is reserved")
+            raise create_edgx_error(KIND_SERVER_ERROR, "route is reserved")
         self.router.add_api_route(route, handler, methods=methods or ["GET"])
         self.logger.debug("Route added", extra={"route": route,
                                                 "methods": str(methods)})
@@ -158,7 +155,6 @@ class RestController(DiscoveryController, CommandController):
         """Set the custom configuration, which is used to include the service's custom
         config in the /config endpoint response.
 
-        Mirrors `(c *RestController) SetCustomConfigInfo(...)` in restrouter.go.
         """
         self.custom_config = custom_config
 
@@ -167,7 +163,7 @@ class RestController(DiscoveryController, CommandController):
     def send_event(self, event: Any, correlation_id: str) -> None:
         """Push an Event to the MessageBus in a background thread.
 
-        Mirrors `go sdkCommon.SendEvent(event, correlationId, dic)` in command.go.  The
+        The
         actual push is delegated to the `send_event_handler` hook (the port of
         `sdkCommon.SendEvent`); when the hook is not wired yet the event is only logged,
         since the messaging / metrics modules are ported in a later phase.
@@ -216,7 +212,7 @@ class RestController(DiscoveryController, CommandController):
     def metrics(self, request: Request) -> Response:
         """Handle the GET `/api/v3/metrics` request.
 
-        Mirrors the bootstrap common controller `Metrics` handler.  The metrics are
+Mirrors the bootstrap common controller `Metrics` handler. The metrics are
         provided by the `metrics_provider` hook (the port of the Metrics Manager); when
         it is not wired yet an empty map is returned.
         """
@@ -238,7 +234,7 @@ class RestController(DiscoveryController, CommandController):
 
     def _config_to_dict(self) -> Dict[str, Any]:
         """Serialize the service configuration (and the custom configuration) into a
-        JSON friendly structure.  The Python `ConfigurationStruct` model is ported in a
+JSON friendly structure. The Python `ConfigurationStruct` model is ported in a
         later phase, so dataclasses / dicts are handled and everything else is converted
         defensively.
         """
@@ -269,5 +265,5 @@ class RestController(DiscoveryController, CommandController):
     # -- application entry point -----------------------------------------------------
 
     def app(self) -> FastAPI:
-        """Return the underlying FastAPI application (mirrors Go `Router()`)."""
+        """Return the underlying FastAPI application."""
         return self.router

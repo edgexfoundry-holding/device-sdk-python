@@ -8,11 +8,11 @@ A Python port of `edgexfoundry/device-sdk-go` that reuses the client / bootstrap
 configuration / messaging modules from `edgexfoundry-holding/app-functions-sdk-python`.
 
 Modules:
-    interfaces:    Abstract base classes (ProtocolDriver, DeviceServiceSDK).
-    models:        Data models (CommandValue, CommandRequest, AsyncValues,
+interfaces: Abstract base classes (ProtocolDriver, DeviceServiceSDK).
+models: Data models (CommandValue, CommandRequest, AsyncValues,
                    DiscoveredDevice, Notify).
-    internal:      Internal implementation modules (cache, transformer, controller, etc.)
-    service:       DeviceService implementation and bootstrap.
+internal: Internal implementation modules (cache, transformer, controller, etc.)
+service: DeviceService implementation and bootstrap.
 """
 
 __version__ = '4.0.0'

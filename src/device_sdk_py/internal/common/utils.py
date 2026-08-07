@@ -2,13 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The common utility functions of the EdgeX Device Service SDK - ported from
 `device-sdk-go/internal/common/utils.go`.
 
 The Go file provides timestamp / ID helpers used all over the SDK, the Event / Reading
 tag helpers (`AddEventTags`, `AddReadingTags`) that the messaging layer applies before
 publishing, the Core Metadata OperatingState update helper (`UpdateOperatingState`) and
-the sent-event metric counters.  This module also defines the `EdgexError` exception
+the sent-event metric counters. This module also defines the `EdgexError` exception
 hierarchy used by the application and controller layers as the Python counterpart of the
 Go `errors.EdgeX` return values (`errors.NewCommonEdgeX(kind, message, cause)`), together
 with the mapping from the Go error kind to the HTTP status code.
@@ -33,7 +32,7 @@ _logger = logging.getLogger(__name__)
 class EdgexErrorKind(Enum):
     """Categorical identifier for EdgeX errors.
 
-    Python counterpart of the `errors.Kind` values from go-mod-core-contracts that are
+    Kind` values from go-mod-core-contracts that are
     used by the device service.
     """
     UNKNOWN = "Unknown"
@@ -78,7 +77,7 @@ _ERROR_KIND_STATUS: Dict[EdgexErrorKind, int] = {
 class EdgexError(Exception):
     """Raised when an EdgeX operation fails.
 
-    Python counterpart of the `errors.EdgeX` error returned by the Go functions.  Carries
+    EdgeX` error returned by the Go functions. Carries
     an `EdgexErrorKind` and the HTTP status code derived from it (`.code`).
     """
 
@@ -97,10 +96,9 @@ class EdgexError(Exception):
         return self.message
 
 
-def new_edgx_error(kind: EdgexErrorKind, message: str) -> EdgexError:
+def create_edgx_error(kind: EdgexErrorKind, message: str) -> EdgexError:
     """Create an `EdgexError` with the given kind and message.
 
-    Python counterpart of `errors.NewCommonEdgeX(kind, message, nil)`.
     """
     return EdgexError(kind=kind, message=message)
 
@@ -120,7 +118,7 @@ KIND_STATUS_CONFLICT = EdgexErrorKind.STATUS_CONFLICT
 def make_uid() -> str:
     """Return a new unique ID (a random UUID string).
 
-    Python counterpart of the `uuid.NewString()` calls in the Go code.
+    NewString()` calls in the Go code.
     """
     return str(uuid.uuid4())
 
@@ -128,7 +126,6 @@ def make_uid() -> str:
 def make_timestamp() -> int:
     """Return the current time in nanoseconds since the Unix epoch.
 
-    Python counterpart of `time.Now().UnixNano()`.
     """
     return time.time_ns()
 
@@ -136,7 +133,6 @@ def make_timestamp() -> int:
 def current_time_millis() -> int:
     """Return the current time in milliseconds since the Unix epoch.
 
-    Python counterpart of `time.Now().UnixMilli()`.
     """
     return time.time_ns() // 1_000_000
 
@@ -145,8 +141,8 @@ def update_operating_state(name: str, state: str, logger: logging.Logger,
                            device_client: Optional[Any] = None) -> None:
     """Update the OperatingState of the Device with the given name in Core Metadata.
 
-    Mirrors `UpdateOperatingState(name, state, lc, dc)` in utils.go which issues an
-    `UpdateDeviceRequest` (with `bypassValidation=true`) through the Device client.  The
+    Which issues an
+`UpdateDeviceRequest` (with `bypassValidation=true`) through the Device client. The
     Python `device_client` is expected to provide an `update_operating_state(name, state)`
     method; when it is not provided (the client is ported in a later phase) the update is
     skipped with a warning instead of raising.
@@ -167,7 +163,6 @@ def add_event_tags(event: Any) -> None:
     """Merge the tags of the DeviceCommand (the Event source) and the Device into the
     Event.
 
-    Mirrors `AddEventTags(event *dtos.Event)` in utils.go.  The Python `DeviceCommand`
     model carries no tags, so only the Device tags are applied; the tags are merged into
     the existing `event.tags` map in place.
     """
@@ -188,7 +183,7 @@ def add_event_tags(event: Any) -> None:
 def add_reading_tags(reading: Any) -> None:
     """Merge the tags of the DeviceResource into the reading.
 
-    Mirrors `AddReadingTags(reading *dtos.BaseReading)` in utils.go.  The Python
+    The Python
     `DeviceResource` model carries a single `tag` string (instead of the Go
     `Tags map[string]interface{}`); when it is set it is stored under the "tag" key.
     """

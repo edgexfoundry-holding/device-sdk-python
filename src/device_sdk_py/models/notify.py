@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Notification data models - ported from `device-sdk-go/pkg/models/notify.go`.
 
 The Go file defines `Progress` (embedded into `DeviceDiscoveryProgress`); those two are
 reproduced here together with a general `Notify` data class that bundles the fields used
@@ -18,7 +17,6 @@ from dataclasses import dataclass
 class Progress:
     """Progress of an asynchronous operation (e.g. device discovery or profile scan).
 
-    Corresponds to `models.Progress` in notify.go.
     """
     request_id: str = ""
     progress: int = 0
@@ -29,7 +27,6 @@ class Progress:
 class DeviceDiscoveryProgress(Progress):
     """Device discovery progress notification.
 
-    Corresponds to `models.DeviceDiscoveryProgress` in notify.go, which embeds `Progress`
     and adds the discovered device count.
     """
     discovered_device_count: int = 0

@@ -6,9 +6,9 @@ request JSON.
 
 This mirrors ``app-functions-sdk-python``'s DTO layer (the camelCase EdgeX contracts:
 ``AddDeviceRequest`` / ``AddDeviceProfileRequest`` / ``AddDeviceServiceRequest`` /
-``AddProvisionWatcherRequest``).  Core Metadata expects a JSON *array* of request objects, each
+``AddProvisionWatcherRequest``). Core Metadata expects a JSON *array* of request objects, each
 carrying an ``apiVersion`` / ``requestId`` envelope and the entity under the matching key (e.g.
-``device`` for devices, ``profile`` for profiles).  Referencing the Go ``device-sdk-go``
+``device`` for devices, ``profile`` for profiles). Referencing the Go ``device-sdk-go``
 ``processProfiles`` / ``processDevices`` / ``processWatchers`` and ``selfRegister`` flows.
 """
 
@@ -36,7 +36,7 @@ def _make_uid() -> str:
 
 
 def _request(request_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Wrap an entity under the ``{apiVersion, requestId, ...}`` request envelope."""
+    """Wrap an entity under the ``{apiVersion, requestId,...}`` request envelope."""
     return {"apiVersion": API_VERSION, "requestId": _make_uid(), **request_data}
 
 
@@ -186,7 +186,7 @@ def device_service_to_dto(name: str, base_address: str, admin_state: str,
                           labels: List[str], properties: Dict[str, Any]) -> Dict[str, Any]:
     """Serialize a DeviceService onto Core Metadata (``dtos.DeviceService``).
 
-    Mirrors Go ``selfRegister`` which builds a DeviceService with ``Name``, ``Labels``,
+    SelfRegister`` which builds a DeviceService with ``Name``, ``Labels``,
     ``BaseAddress``, ``AdminState`` and an empty ``Properties`` map.
     """
     dto: Dict[str, Any] = {"name": name}
@@ -208,7 +208,7 @@ def add_device_service_request(service: Dict[str, Any]) -> Dict[str, Any]:
 def provision_watcher_to_dto(watcher: ProvisionWatcher) -> Dict[str, Any]:
     """Serialize a ProvisionWatcher into the Core ``provisionwatcher`` body dict.
 
-    Mirrors ``dtos.ProvisionWatcher``.  Since EdgeX 4.0 the ProvisionWatcher carries a
+Mirrors ``dtos.ProvisionWatcher``. Since EdgeX 4.0 the ProvisionWatcher carries a
     ``discoveredDevice`` child object (with its own ``profileName`` / ``adminState``) which
     Core Metadata validates; the model keeps a single ``profile_name`` / ``admin_state`` so the
     child is derived from them (matching the Go device-simple provision watcher file).

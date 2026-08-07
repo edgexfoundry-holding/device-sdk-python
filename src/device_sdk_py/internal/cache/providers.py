@@ -2,18 +2,17 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The cache data models and error types - ported from `device-sdk-go/internal/cache` and
 `go-mod-core-contracts/v4/models`.
 
 The three caches (`DeviceCache`, `DeviceProfileCache`, `ProvisionWatcherCache`) store
-lightweight copies of the Core Metadata models.  Those models are reproduced here as plain
+lightweight copies of the Core Metadata models. Those models are reproduced here as plain
 dataclasses with fields aligned to `go-mod-core-contracts/v4/models` (which the Go SDK
-imports).  Every model provides a `clone()` method returning a deep copy, since the caches
+imports). Every model provides a `clone()` method returning a deep copy, since the caches
 hand out clones of the stored objects to avoid concurrent map access (mirroring the Go
 `models.Device.Clone()` / `models.DeviceProfile.Clone()` / `models.ProvisionWatcher.Clone()`).
 
 This module also defines the `CacheError` exception hierarchy used by all three caches as the
-Python counterpart of the Go `errors.EdgeX` return values (`KindDuplicateName`,
+EdgeX` return values (`KindDuplicateName`,
 `KindEntityDoesNotExist`, `KindContractInvalid`).
 """
 
@@ -25,14 +24,14 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 #: Protocol properties, i.e. a key/value map of a single protocol of a Device or
-#: ProvisionWatcher.  Aligned to `models.ProtocolProperties` (a `map[string]string`).
+#: ProvisionWatcher. Aligned to `models.ProtocolProperties` (a `map[string]string`).
 ProtocolProperties = Dict[str, str]
 
 
 class CacheErrorKind(Enum):
     """Categorical identifier for cache errors.
 
-    Python counterpart of the relevant `errors.Kind` values used by the Go cache package.
+    Kind` values used by the Go cache package.
     """
     DUPLICATE_NAME = "DuplicateName"
     ENTITY_DOES_NOT_EXIST = "NotFound"
@@ -42,7 +41,7 @@ class CacheErrorKind(Enum):
 class CacheError(Exception):
     """Raised when a cache operation fails.
 
-    Python counterpart of the `errors.EdgeX` error returned by the Go cache methods.
+    EdgeX` error returned by the Go cache methods.
     Carries a `CacheErrorKind` so callers can distinguish duplicate names, missing
     entities and invalid contract values.
     """
@@ -53,10 +52,9 @@ class CacheError(Exception):
         self.message = message
 
 
-def new_cache_error(kind: CacheErrorKind, message: str) -> CacheError:
+def create_cache_error(kind: CacheErrorKind, message: str) -> CacheError:
     """Create a `CacheError` with the given kind and message.
 
-    Python counterpart of `errors.NewCommonEdgeX(kind, message, nil)`.
     """
     return CacheError(kind=kind, message=message)
 
@@ -104,7 +102,7 @@ class AutoEvent:
 class ResourceProperties:
     """The properties of a Device Resource.
 
-    Aligned to `models.ResourceProperties` in deviceresource.go.  The optional numeric
+Aligned to `models.ResourceProperties` in deviceresource.go. The optional numeric
     transformation fields use `None` to represent a missing (Go nil pointer) value.
 
     Attributes:
@@ -215,7 +213,7 @@ class DeviceCommand:
 class Device:
     """A Device managed by the Device Service.
 
-    Aligned to `models.Device` in device.go.  The caches store these objects and hand out
+Aligned to `models.Device` in device.go. The caches store these objects and hand out
     clones on read.
 
     Attributes:
@@ -264,7 +262,7 @@ class Device:
 class DeviceProfile:
     """A collection of specifications that define a Device's capabilities.
 
-    Aligned to `models.DeviceProfile` in deviceprofile.go.  The caches store these objects
+Aligned to `models.DeviceProfile` in deviceprofile.go. The caches store these objects
     and hand out clones on read.
 
     Attributes:
@@ -303,7 +301,7 @@ class DeviceProfile:
 class ProvisionWatcher:
     """A ProvisionWatcher used to automatically provision discovered Devices.
 
-    Aligned to `models.ProvisionWatcher` in provisionwatcher.go.  The caches store these
+Aligned to `models.ProvisionWatcher` in provisionwatcher.go. The caches store these
     objects and hand out clones on read.
 
     Attributes:

@@ -2,16 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The read-result value transformations - ported from
 `device-sdk-go/internal/transformer/transformresult.go`.
 
 `transform_read_result` performs the outgoing (read) data transformation on a CommandValue
-using the ResourceProperties of its DeviceResource.  The transformation order is Mask,
+using the ResourceProperties of its DeviceResource. The transformation order is Mask,
 Shift, Base, Scale, Offset as defined by the EdgeX Device Service data transformation ADR
 (https://docs.edgexfoundry.org/4.0/design/adr/device-service/0011-DeviceService-Rest-API/#data-transformations).
 
-The Go functions return `errors.EdgeX`; this port raises exceptions instead.  The
-`TransformerError` hierarchy mirrors the Go error kinds used here: `OverflowTransformerError`
+The Go functions return `errors.EdgeX`; this port raises exceptions instead. The
+`TransformerError` hierarchy kinds used here: `OverflowTransformerError`
 for `KindOverflowError`, `NaNTransformerError` for `KindNaNError`.
 """
 
@@ -34,7 +33,7 @@ from ...models import (
     VALUETYPE_UINT32,
     VALUETYPE_UINT64,
     CommandValue,
-    new_command_value,
+    create_command_value,
 )
 from .checknan import is_nan
 from .transformvaluechecker import (
@@ -79,7 +78,7 @@ _INT_WIDTHS = {
 class TransformerError(Exception):
     """Base class for value transformation errors.
 
-    Python counterpart of the `errors.EdgeX` errors returned by the Go transformer
+    EdgeX` errors returned by the Go transformer
     functions.
     """
 
@@ -87,21 +86,18 @@ class TransformerError(Exception):
 class OverflowTransformerError(TransformerError):
     """Raised when a transformed value does not fit in its original value type range.
 
-    Python counterpart of `errors.KindOverflowError`.
     """
 
 
 class NaNTransformerError(TransformerError):
     """Raised when a floating point CommandValue holds a NaN value.
 
-    Python counterpart of `errors.KindNaNError`.
     """
 
 
 def is_numeric_value_type(cv: CommandValue) -> bool:
     """Return True when the CommandValue holds one of the numeric value types.
 
-    Mirrors `isNumericValueType(cv *models.CommandValue)` in transformresult.go.
     """
     return cv.value_type in _NUMERIC_VALUE_TYPES
 
@@ -150,8 +146,7 @@ def _truncate_int(value: int, value_type: str) -> int:
 def command_value_for_transform(cv: CommandValue) -> Any:
     """Return the numeric value of the CommandValue ready for transformation.
 
-    Mirrors `commandValueForTransform(cv *models.CommandValue)` in transformresult.go.
-    Raises `TransformerError` for an unsupported (non-numeric) value type.  A `None` value
+Raises `TransformerError` for an unsupported (non-numeric) value type. A `None` value
     is returned as-is.
     """
     if cv.value is None:
@@ -164,7 +159,6 @@ def command_value_for_transform(cv: CommandValue) -> Any:
 def transform_mask(value: int, mask: int, value_type: str) -> int:
     """Apply a bitwise AND mask to the value, truncated to the value type width.
 
-    Mirrors `transformMask(value any, mask uint64)` in transformresult.go.  `value_type`
     is passed explicitly since Python ints do not carry a width; the mask is truncated to
     the type width and the result is sign-interpreted for signed types, exactly like the
     Go `v & uint8(mask)` / `v & int8(mask)` expressions.
@@ -180,8 +174,8 @@ def transform_mask(value: int, mask: int, value_type: str) -> int:
 def transform_shift(value: int, shift: int, value_type: str) -> int:
     """Apply a bit shift to the value, truncated to the value type width.
 
-    Mirrors `transformShift(value any, shift int64)` in transformresult.go.  Positive
-    values indicate a right shift, negative a left shift.  The result is truncated to the
+    Positive
+values indicate a right shift, negative a left shift. The result is truncated to the
     value type width to emulate the Go type conversion of the shifted value.
     """
     if shift > 0:
@@ -221,7 +215,6 @@ def _check_in_range(value: Any, value_type: str, value_float: float) -> None:
 def transform_base(value: Any, base: float, read: bool, value_type: str) -> Any:
     """Apply the base transformation (`base ** value` when reading, the inverse otherwise).
 
-    Mirrors `transformBase(value any, base float64, read bool)` in transformresult.go.
     Raises `OverflowTransformerError` when the transformed value leaves the original type
     range.
     """
@@ -237,9 +230,8 @@ def transform_base(value: Any, base: float, read: bool, value_type: str) -> Any:
 def transform_scale(value: Any, scale: float, read: bool, value_type: str) -> Any:
     """Apply the scale transformation (`value * scale` when reading, `/` otherwise).
 
-    Mirrors `transformScale(value any, scale float64, read bool)` in transformresult.go.
     For integer value types the Go implementation computes the result with integer
-    arithmetic using the truncated scale; this is replicated here.  Raises
+arithmetic using the truncated scale; this is replicated here. Raises
     `OverflowTransformerError` when the transformed value leaves the original type range.
     """
     value_float = _to_value_float(value, value_type)
@@ -262,9 +254,8 @@ def transform_scale(value: Any, scale: float, read: bool, value_type: str) -> An
 def transform_offset(value: Any, offset: float, read: bool, value_type: str) -> Any:
     """Apply the offset transformation (`value + offset` when reading, `-` otherwise).
 
-    Mirrors `transformOffset(value any, offset float64, read bool)` in transformresult.go.
     For integer value types the Go implementation computes the result with integer
-    arithmetic using the truncated offset; this is replicated here.  Raises
+arithmetic using the truncated offset; this is replicated here. Raises
     `OverflowTransformerError` when the transformed value leaves the original type range.
     """
     value_float = _to_value_float(value, value_type)
@@ -287,8 +278,7 @@ def transform_offset(value: Any, offset: float, read: bool, value_type: str) -> 
 def transform_read_result(cv: CommandValue, properties: Any) -> None:
     """Transform the outgoing (read) value of the CommandValue in place.
 
-    Mirrors `TransformReadResult(cv *models.CommandValue, pv models.ResourceProperties)`
-    in transformresult.go.  Applies Mask, Shift, Base, Scale and Offset in that order to
+Applies Mask, Shift, Base, Scale and Offset in that order to
     numeric values only.
 
     Raises:
@@ -328,9 +318,9 @@ def transform_read_result(cv: CommandValue, properties: Any) -> None:
 def check_assertion(cv: CommandValue, assertion: str) -> None:
     """Verify that the CommandValue's string form matches the assertion string.
 
-    Mirrors `checkAssertion(cv, assertion, deviceName, lc, dc)` in transformresult.go,
+    ,
     minus the Go side effect of setting the Device OperatingState to Down (which is a
-    service-level concern handled by the caller of `command_values_to_event`).  Raises
+service-level concern handled by the caller of `command_values_to_event`). Raises
     `TransformerError` when the assertion is set and does not match.
     """
     if assertion != "" and cv.value_to_string() != assertion:
@@ -343,14 +333,12 @@ def map_command_value(cv: CommandValue, mappings: Dict[str, str]) -> Optional[Co
     """Map the CommandValue's string form to the mapped value, producing a String
     CommandValue.
 
-    Mirrors `mapCommandValue(value *models.CommandValue, mappings map[string]string)` in
-    transformresult.go.  Returns None when no mapping exists for the value.
+    In
+Returns None when no mapping exists for the value.
     """
     key = cv.value_to_string()
     if key not in mappings:
         return None
-    return new_command_value(cv.device_resource_name, VALUETYPE_STRING, mappings[key])
+    return create_command_value(cv.device_resource_name, VALUETYPE_STRING, mappings[key])
 
 
-# PascalCase aliases kept for parity with the Go exported identifiers.
-TransformReadResult = transform_read_result

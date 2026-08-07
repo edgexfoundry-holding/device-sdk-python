@@ -2,11 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The internal application layer of the EdgeX Device Service SDK - ported from
 `device-sdk-go/internal/application`.
 
 This package contains the application logic invoked by the REST controllers (and the
-command subscription of the messaging layer).  The Go functions receive their
+command subscription of the messaging layer). The Go functions receive their
 dependencies from the DI container; the Python port passes them as explicit arguments
 instead.
 

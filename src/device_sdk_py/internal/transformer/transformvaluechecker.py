@@ -2,11 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The transformed-value range checker - ported from
 `device-sdk-go/internal/transformer/transformvaluechecker.go`.
 
 `check_transformed_value_in_range` verifies that a float64 value produced by one of the
-value transformations still fits in the range of the original value type.  Python ints and
+value transformations still fits in the range of the original value type. Python ints and
 floats do not carry a width / precision, so - unlike the Go version which dispatches on the
 concrete Go type - this port takes the EdgeX value type as an explicit parameter.
 """
@@ -29,7 +28,7 @@ from ...models import (
     VALUETYPE_UINT64,
 )
 
-# Maximum float32 value (Go `math.MaxFloat32`).
+# Maximum float32 value.
 MAX_FLOAT32 = 3.4028234663852886e+38
 
 _MAX_UINT8 = 2 ** 8 - 1
@@ -55,12 +54,12 @@ _INTEGER_VALUE_TYPES = frozenset({
 def check_transformed_value_in_range(origin: Any, value_type: str, transformed: float) -> bool:
     """Return True when `transformed` can be represented as the original value type.
 
-    Mirrors `checkTransformedValueInRange(origin, transformed)` in
-    transformvaluechecker.go.  For integer types the value must be an exact integer within
+    In
+For integer types the value must be an exact integer within
     the type range; for float32 it must not be NaN and its absolute value must not exceed
-    `MAX_FLOAT32`; for float64 it must not be NaN or infinite.  `value_type` is passed
+`MAX_FLOAT32`; for float64 it must not be NaN or infinite. `value_type` is passed
     explicitly since Python values do not carry a width/precision (the Go version dispatches
-    on the concrete type of `origin`).  `origin` is kept for parity with the Go signature.
+on the concrete type of `origin`). `origin` is kept for parity with the Go signature.
     """
     if value_type == VALUETYPE_UINT8:
         return 0 <= transformed <= _MAX_UINT8 and math.trunc(transformed) == transformed

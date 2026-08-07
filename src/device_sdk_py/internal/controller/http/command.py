@@ -2,11 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The device command REST controller - ported from
 `device-sdk-go/internal/controller/http/command.go`.
 
 `CommandController` provides the `get_command` and `set_command` handlers registered
-for the GET / PUT `/api/v3/device/{name}/{command}` route.  They parse the SDK reserved
+for the GET / PUT `/api/v3/device/{name}/{command}` route. They parse the SDK reserved
 query parameters (`ds-regexcommand`, `ds-pushevent`, `ds-returnevent`), forward the
 remaining query string to the ProtocolDriver via the application layer
 (`application.command_read` / `application.command_write`) and assemble the
@@ -37,7 +36,7 @@ from ...common.consts import (
     VALUE_TRUE,
 )
 from ...common.utils import EdgexError
-from ._utils import (
+from._utils import (
     base_response,
     correlation_id_from_request,
     filter_query_params,
@@ -58,9 +57,9 @@ class CommandController:
     def get_command(self, request: Request) -> Response:
         """Handle the GET `/api/v3/device/{name}/{command}` request.
 
-        Mirrors `(c *RestController) GetCommand(e echo.Context)` in command.go: reads the
+        : reads the
         device / command names from the URL, filters the reserved query parameters and
-        executes the command through `application.command_read`.  When `ds-pushevent=true`
+executes the command through `application.command_read`. When `ds-pushevent=true`
         the resulting Event is pushed to the MessageBus and, unless `ds-returnevent=false`
         is set, the Event is returned in the response.
         """
@@ -100,9 +99,9 @@ class CommandController:
     async def set_command(self, request: Request) -> Response:
         """Handle the PUT `/api/v3/device/{name}/{command}` request.
 
-        Mirrors `(c *RestController) SetCommand(e echo.Context)` in command.go: filters
+        : filters
         the reserved query parameters, parses the request body and executes the command
-        through `application.command_write`.  The resulting Event (when the command is
+through `application.command_write`. The resulting Event (when the command is
         not write-only) is pushed to the MessageBus and a BaseResponse is returned.
 
         The handler is asynchronous because it reads the request body, which is a

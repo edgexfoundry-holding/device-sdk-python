@@ -2,9 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Data models for the EdgeX Device Service SDK - ported from `device-sdk-go/pkg/models`.
-
-Exports:
+Data models for the EdgeX Device Service SDK - Exports:
     CommandValue: A reading value (Get) or command parameter (Put) with typed getters.
     CommandRequest: A request for a command sent to a ProtocolDriver.
     AsyncValues: An asynchronous batch of readings produced by a ProtocolDriver.
@@ -46,10 +44,8 @@ from .command_value import (
     VALUETYPES,
     ValueTypeError,
     CommandValue,
-    NewCommandValue,
-    NewCommandValueWithOrigin,
-    new_command_value,
-    new_command_value_with_origin,
+    create_command_value,
+    create_command_value_with_origin,
     validate,
 )
 from .discovered_device import DiscoveredDevice, ProtocolProperties
@@ -94,9 +90,7 @@ __all__ = [
     "VALUETYPE_FLOAT64_ARRAY",
     "VALUETYPE_OBJECT",
     "VALUETYPE_OBJECT_ARRAY",
-    "NewCommandValue",
-    "NewCommandValueWithOrigin",
-    "new_command_value",
-    "new_command_value_with_origin",
+    "create_command_value",
+    "create_command_value_with_origin",
     "validate",
 ]

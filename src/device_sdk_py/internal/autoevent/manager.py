@@ -1,8 +1,7 @@
 # Copyright (C) 2026 YIQISOFT
 # SPDX-License-Identifier: Apache-2.0
 
-"""The AutoEvent scheduling manager - ported from
-`device-sdk-go/internal/autoevent/*.go` (the `BootstrapHandler` / `Manager` logic).
+"""`device-sdk-go/internal/autoevent/*.go` (the `BootstrapHandler` / `Manager` logic).
 
 ``DeviceService._start_auto_events`` lazily imports this module and builds an
 ``AutoEventManager``. Until now the module did not exist, so every ``AutoEvent``
@@ -37,7 +36,7 @@ from ..cache import (
 # OPERATING_STATE_DOWN is defined in internal/common/consts (mirroring the Go
 # `models.OperatingState` constants) and re-exported by common, not by cache.
 from ..common.consts import OPERATING_STATE_DOWN
-from .executor import AutoEventExecutor, new_executor
+from .executor import AutoEventExecutor, create_executor
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard
     from ..service.device_service import DeviceService
@@ -92,7 +91,7 @@ class AutoEventManager:
             for executor in device_executors:
                 try:
                     executor.stop()
-                except Exception:  # pragma: no cover - defensive
+                except Exception: # pragma: no cover - defensive
                     self._logger.exception("AutoEvent - error stopping executor")
 
     # ------------------------------------------------------------------ #
@@ -121,13 +120,13 @@ class AutoEventManager:
                     "AutoEvent on %s has no source name; skipping", device.name)
                 continue
             try:
-                executor = new_executor(
+                executor = create_executor(
                     device_name=device.name,
                     auto_event=auto_event,
                     read_handler=self._read,
                     send_handler=self._send,
                     send_changed_readings_only=auto_event.on_change)
-            except Exception:  # pragma: no cover - defensive
+            except Exception: # pragma: no cover - defensive
                 self._logger.exception(
                     "AutoEvent - failed to create executor for %s/%s",
                     device.name, source_name)

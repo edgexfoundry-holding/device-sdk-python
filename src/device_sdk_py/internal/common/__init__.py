@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The common package of the EdgeX Device Service SDK - ported from
 `device-sdk-go/internal/common`.
 
 Exports:
@@ -10,7 +9,7 @@ Exports:
     utils: The common utility functions and the `EdgexError` exception hierarchy.
 """
 
-from . import consts, utils
+from. import consts, utils
 from .consts import (
     API_ALL_DEVICE_ROUTE,
     API_BASE,
@@ -68,7 +67,7 @@ from .utils import (
     current_time_millis,
     make_timestamp,
     make_uid,
-    new_edgx_error,
+    create_edgx_error,
     update_operating_state,
 )
 
@@ -116,7 +115,7 @@ __all__ = [
     "BYPASS_VALIDATION_QUERY_PARAM",
     "EdgexError",
     "EdgexErrorKind",
-    "new_edgx_error",
+    "create_edgx_error",
     "KIND_SERVER_ERROR",
     "KIND_CONTRACT_INVALID",
     "KIND_ENTITY_DOES_NOT_EXIST",

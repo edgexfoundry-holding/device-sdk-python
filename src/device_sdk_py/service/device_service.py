@@ -2,23 +2,18 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The DeviceService implementation - ported from `device-sdk-go/pkg/service/service.go`
-together with `manageddevices.go`, `managedprofiles.go`, `managedwatchers.go` and
-`managedautoevents.go`.
+The DeviceService implementation.
 
-`DeviceService` implements `interfaces.DeviceServiceSDKExt` (the Go `deviceService`
-struct implements `interfaces.DeviceServiceSDKExt`, while `NewDeviceService` returns it as
-`interfaces.DeviceServiceSDK`).  The managed Devices / DeviceProfiles / ProvisionWatchers
-are held by the internal cache singletons (`cache.Devices()`, `cache.Profiles()`,
-`cache.ProvisionWatchers()`) exactly as in Go; the Core Metadata network calls (the Go
-clients pulled from the DI container) are lightweight placeholders - they only log a TODO
-message until the app-functions-sdk-python metadata clients are ported.
+`DeviceService` implements `interfaces.DeviceServiceSDK`. The managed Devices /
+DeviceProfiles / ProvisionWatchers are held by the internal cache singletons
+(`cache.Devices()`, `cache.Profiles()`, `cache.ProvisionWatchers()`); the Core Metadata
+network calls are lightweight placeholders - they only log a TODO message until the
+app-functions-sdk-python metadata clients are ported.
 
-The `cache` module needs to be initialized (`new_device_cache` / `new_profile_cache` /
-`new_provision_watcher_cache`) before this service is used, mirroring the Go bootstrap.
+The `cache` module needs to be initialized (`create_device_cache` / `create_profile_cache` /
+`create_provision_watcher_cache`) before this service is used.
 
-Errors mirror the Go `errors.EdgeX` return values by raising `EdgexError` from
-`internal.common.utils`.
+Errors are raised as `EdgexError` from `internal.common.utils`.
 """
 
 from __future__ import annotations
@@ -49,7 +44,7 @@ from ..internal.common.utils import (
     KIND_ENTITY_DOES_NOT_EXIST,
     EdgexError,
     EdgexErrorKind,
-    new_edgx_error,
+    create_edgx_error,
     make_uid,
 )
 from ..internal.common.consts import OPERATING_STATE_UP
@@ -58,7 +53,7 @@ from ..internal.controller.messaging.client import (
     MessageBusConfig,
     MessageClient,
     HostInfo,
-    new_message_client,
+    create_message_client,
     AUTH_MODE_NONE,
     DEFAULT_MESSAGEBUS_TYPE,
 )
@@ -78,7 +73,7 @@ from ..internal.provision import (
     load_provision_watchers,
 )
 from ..internal.transformer.transform import Event
-from ..interfaces import DeviceServiceSDKExt, UpdatableConfig
+from ..interfaces import DeviceServiceSDK, UpdatableConfig
 from ..models import AsyncValues, DiscoveredDevice
 
 if TYPE_CHECKING:
@@ -94,22 +89,17 @@ _DEFAULT_HTTP_PORT = 59986
 
 @dataclass
 class _DeviceServiceModel:
-    """The lightweight DeviceService model used for the service AdminState check.
-
-    Corresponds to `models.DeviceService` in device.go; the Go bootstrap initializes it
-    with just the service name and an UNLOCKED admin state.
-    """
+    """The lightweight DeviceService model used for the service AdminState check."""
     name: str = ""
     admin_state: str = ADMIN_STATE_UNLOCKED
 
 
-class DeviceService(DeviceServiceSDKExt):
-    """The DeviceService implementation of `DeviceServiceSDKExt`.
+class DeviceService(DeviceServiceSDK):
+    """The DeviceService implementation of `DeviceServiceSDK`.
 
-    Corresponds to `deviceService` in service.go.  The managed entity CRUD methods mirror
-    `manageddevices.go`, `managedprofiles.go`, `managedwatchers.go` and the AutoEvent
-    methods mirror `managedautoevents.go`; the Core Metadata side of each operation is a
-    placeholder until the app-functions-sdk-python metadata clients are ported.
+    The managed entity CRUD methods cover Devices, DeviceProfiles, ProvisionWatchers and
+    AutoEvents; the Core Metadata side of each operation is a placeholder until the
+    app-functions-sdk-python metadata clients are ported.
     """
 
     def __init__(self, service_key: str, service_version: str, driver: Any,
@@ -136,7 +126,7 @@ class DeviceService(DeviceServiceSDKExt):
         self._send_event_handler = send_event_handler
 
         #: The DeviceService model used by the command controller for the service
-        #: AdminState check (Go `s.deviceServiceModel`).
+#: AdminState check.
         self.device_service_model = _DeviceServiceModel(name=service_key)
 
         #: The async readings channel handed to ProtocolDrivers via `async_values_channel`.
@@ -173,9 +163,8 @@ class DeviceService(DeviceServiceSDKExt):
     def add_device(self, device: "Device") -> str:
         """Add a new Device to the Device Service and Core Metadata.
 
-        Go: `AddDevice(device models.Device) (string, error)` in manageddevices.go.
 
-        Mirrors the Go implementation: a duplicate name is rejected against the cache,
+        A duplicate name is rejected against the cache,
         `device.service_name` is set to this service's name and the Device is added to
         Core Metadata (a placeholder for now); the returned id is the one assigned by Core
         Metadata (a generated UUID in the placeholder).
@@ -185,7 +174,7 @@ class DeviceService(DeviceServiceSDKExt):
         """
         _, exists = Devices().for_name(device.name)
         if exists:
-            raise new_edgx_error(
+            raise create_edgx_error(
                 EdgexErrorKind.DUPLICATE_NAME,
                 f"name conflicted, Device {device.name} exists")
 
@@ -197,11 +186,10 @@ class DeviceService(DeviceServiceSDKExt):
         """Add a new Device to the Device Service and Core Metadata with
         bypassValidation=true to skip device validation.
 
-        Go: `AddDeviceWithoutValidation(device models.Device) (string, error)`.
         """
         _, exists = Devices().for_name(device.name)
         if exists:
-            raise new_edgx_error(
+            raise create_edgx_error(
                 EdgexErrorKind.DUPLICATE_NAME,
                 f"name conflicted, Device {device.name} exists")
 
@@ -212,14 +200,13 @@ class DeviceService(DeviceServiceSDKExt):
     def devices(self) -> List["Device"]:
         """Return all managed Devices from cache.
 
-        Go: `Devices() []models.Device` (returns `cache.Devices().All()`).
+        (returns `cache.Devices().All()`).
         """
         return Devices().all()
 
     def get_device_by_name(self, name: str) -> "Device":
         """Return the Device by its name if it exists in the cache.
 
-        Go: `GetDeviceByName(name string) (models.Device, error)`.
 
         Raises:
             EdgexError: KindEntityDoesNotExist when the Device is not in the cache.
@@ -228,15 +215,14 @@ class DeviceService(DeviceServiceSDKExt):
         if not ok:
             message = f"failed to find Device {name} in cache"
             self._logger.error(message)
-            raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
+            raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
         return device
 
     def update_device(self, device: "Device") -> None:
         """Update the Device in Core Metadata.
 
-        Go: `UpdateDevice(device models.Device) error` which forwards to
-        `PatchDevice(dtos.FromDeviceModelToUpdateDTO(device))`.  Mirrors the Go managed
-        methods, the cache copy is not updated here (as in Go).
+        Forwards to a patch of the Device derived from the updated model; the cache copy
+        is not updated here.
 
         Raises:
             EdgexError: When the Device is not in the cache.
@@ -260,7 +246,6 @@ class DeviceService(DeviceServiceSDKExt):
         """Update the Device in Core Metadata with bypassValidation=true to skip device
         validation.
 
-        Go: `UpdateDeviceWithoutValidation(device models.Device) error`.
         """
         self.get_device_by_name(device.name)
         updates = {
@@ -283,7 +268,6 @@ class DeviceService(DeviceServiceSDKExt):
         anything that is None will not modify the Device. Arrays and Maps are applied as
         an overwrite operation (send the whole new value).
 
-        Go: `PatchDevice(updateDevice dtos.UpdateDevice) error`.
 
         Raises:
             EdgexError: KindContractInvalid when the Device name is missing;
@@ -295,7 +279,6 @@ class DeviceService(DeviceServiceSDKExt):
         """Patch the specified device properties in Core Metadata with
         bypassValidation=true to skip device validation.
 
-        Go: `PatchDeviceWithoutValidation(updateDevice dtos.UpdateDevice) error`.
         """
         self._patch_device_impl(update_device, bypass_validation=True)
 
@@ -303,7 +286,7 @@ class DeviceService(DeviceServiceSDKExt):
         """Remove the specified Device by name from the cache and ensure that the
         instance in Core Metadata is also removed.
 
-        Go: `RemoveDeviceByName(name string) error`.  Mirrors the Go managed method, the
+        The
         cache copy is not removed here (as in Go).
 
         Raises:
@@ -316,7 +299,7 @@ class DeviceService(DeviceServiceSDKExt):
     def device_exists_for_name(self, name: str) -> bool:
         """Return True if a Device exists in cache with the specified name.
 
-        Go: `DeviceExistsForName(name string) bool` (returns `_, ok :=
+        (returns `_, ok :=
         cache.Devices().ForName(name)`).
         """
         _, ok = Devices().for_name(name)
@@ -325,7 +308,6 @@ class DeviceService(DeviceServiceSDKExt):
     def update_device_operating_state(self, name: str, state: str) -> None:
         """Update the OperatingState for the Device with the given name in Core Metadata.
 
-        Go: `UpdateDeviceOperatingState(name string, state models.OperatingState) error`
         which patches the Device (with bypassValidation=true) with only the
         OperatingState.
         """
@@ -337,9 +319,8 @@ class DeviceService(DeviceServiceSDKExt):
                            bypass_validation: bool) -> None:
         """Shared implementation of `patch_device` / `patch_device_without_validation`.
 
-        Mirrors `(s *deviceService) patchDevice(updateDevice, bypassValidation)` in
-        manageddevices.go: the Device name is required, the Device must exist in the cache
-        and only the non-None fields of the UpdateDevice are applied.
+        The Device name is required, the Device must exist in the cache and only the
+        non-None fields of the UpdateDevice are applied.
         """
         if isinstance(update_device, dict):
             name = update_device.get("name")
@@ -348,7 +329,7 @@ class DeviceService(DeviceServiceSDKExt):
         if name is None:
             message = "missing device name for patch device call"
             self._logger.error(message)
-            raise new_edgx_error(KIND_CONTRACT_INVALID, message)
+            raise create_edgx_error(KIND_CONTRACT_INVALID, message)
 
         self.get_device_by_name(name)
 
@@ -370,8 +351,8 @@ class DeviceService(DeviceServiceSDKExt):
     def add_device_profile(self, profile: "DeviceProfile") -> str:
         """Add a new DeviceProfile to the Device Service and Core Metadata.
 
-        Go: `AddDeviceProfile(profile models.DeviceProfile) (string, error)` in
-        managedprofiles.go.  On success the Profile is also added to the profile cache.
+        In
+On success the Profile is also added to the profile cache.
 
         Returns:
             The new DeviceProfile id.
@@ -381,7 +362,7 @@ class DeviceService(DeviceServiceSDKExt):
         """
         _, exists = Profiles().for_name(profile.name)
         if exists:
-            raise new_edgx_error(
+            raise create_edgx_error(
                 EdgexErrorKind.DUPLICATE_NAME,
                 f"name conflicted, Profile {profile.name} exists")
 
@@ -393,7 +374,7 @@ class DeviceService(DeviceServiceSDKExt):
     def device_profiles(self) -> List["DeviceProfile"]:
         """Return all managed DeviceProfiles from cache.
 
-        Go: `DeviceProfiles() []models.DeviceProfile` (returns
+        (returns
         `cache.Profiles().All()`).
         """
         return Profiles().all()
@@ -401,7 +382,6 @@ class DeviceService(DeviceServiceSDKExt):
     def get_profile_by_name(self, name: str) -> "DeviceProfile":
         """Return the Profile by its name if it exists in the cache.
 
-        Go: `GetProfileByName(name string) (models.DeviceProfile, error)`.
 
         Raises:
             EdgexError: KindEntityDoesNotExist when the Profile is not in the cache.
@@ -410,14 +390,14 @@ class DeviceService(DeviceServiceSDKExt):
         if not ok:
             message = f"failed to find Profile {name} in cache"
             self._logger.error(message)
-            raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
+            raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
         return profile
 
     def update_device_profile(self, profile: "DeviceProfile") -> None:
         """Update the DeviceProfile in Core Metadata.
 
-        Go: `UpdateDeviceProfile(profile models.DeviceProfile) error` in
-        managedprofiles.go.  Mirrors the Go managed method, the cache copy is not updated
+        In
+The cache copy is not updated
         here (as in Go).
 
         Raises:
@@ -427,7 +407,7 @@ class DeviceService(DeviceServiceSDKExt):
         if not ok:
             message = f"failed to find Profile {profile.name} in cache"
             self._logger.error(message)
-            raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
+            raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
 
         self._logger.debug("Updating managed Profile %s", profile.name)
         self._update_profile_in_metadata(profile)
@@ -436,7 +416,7 @@ class DeviceService(DeviceServiceSDKExt):
         """Remove the specified DeviceProfile by name from the cache and ensure that the
         instance in Core Metadata is also removed.
 
-        Go: `RemoveDeviceProfileByName(name string) error` in managedprofiles.go.  The
+        The
         Profile is deleted from Core Metadata first and then removed from the cache.
 
         Raises:
@@ -446,7 +426,7 @@ class DeviceService(DeviceServiceSDKExt):
         if not ok:
             message = f"failed to find Profile {name} in cache"
             self._logger.error(message)
-            raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
+            raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
 
         self._logger.debug("Removing managed Profile %s", profile.name)
         self._delete_profile_from_metadata(name)
@@ -457,8 +437,8 @@ class DeviceService(DeviceServiceSDKExt):
     def add_provision_watcher(self, watcher: "ProvisionWatcher") -> str:
         """Add a new Watcher to the cache and Core Metadata.
 
-        Go: `AddProvisionWatcher(watcher models.ProvisionWatcher) (string, error)` in
-        managedwatchers.go.  Mirrors the Go managed method, the watcher is only added to
+        In
+The watcher is only added to
         Core Metadata (a placeholder for now) and the cache is not updated here (as in Go).
 
         Returns:
@@ -469,7 +449,7 @@ class DeviceService(DeviceServiceSDKExt):
         """
         _, exists = ProvisionWatchers().for_name(watcher.name)
         if exists:
-            raise new_edgx_error(
+            raise create_edgx_error(
                 EdgexErrorKind.DUPLICATE_NAME,
                 f"name conflicted, ProvisionWatcher {watcher.name} exists")
 
@@ -482,7 +462,7 @@ class DeviceService(DeviceServiceSDKExt):
     def provision_watchers(self) -> List["ProvisionWatcher"]:
         """Return all managed Watchers from cache.
 
-        Go: `ProvisionWatchers() []models.ProvisionWatcher` (returns
+        (returns
         `cache.ProvisionWatchers().All()`).
         """
         return ProvisionWatchers().all()
@@ -490,7 +470,6 @@ class DeviceService(DeviceServiceSDKExt):
     def get_provision_watcher_by_name(self, name: str) -> "ProvisionWatcher":
         """Return the Watcher by its name if it exists in the cache.
 
-        Go: `GetProvisionWatcherByName(name string) (models.ProvisionWatcher, error)`.
 
         Raises:
             EdgexError: KindEntityDoesNotExist when the Watcher is not in the cache.
@@ -499,14 +478,14 @@ class DeviceService(DeviceServiceSDKExt):
         if not ok:
             message = f"failed to find ProvisionWatcher {name} in cache"
             self._logger.error(message)
-            raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
+            raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
         return watcher
 
     def update_provision_watcher(self, watcher: "ProvisionWatcher") -> None:
         """Update the Watcher in Core Metadata.
 
-        Go: `UpdateProvisionWatcher(watcher models.ProvisionWatcher) error` in
-        managedwatchers.go.  Mirrors the Go managed method, the cache copy is not updated
+        In
+The cache copy is not updated
         here (as in Go).
 
         Raises:
@@ -516,7 +495,7 @@ class DeviceService(DeviceServiceSDKExt):
         if not ok:
             message = f"failed to find ProvisionWatcher {watcher.name} in cache"
             self._logger.error(message)
-            raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
+            raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
 
         self._logger.debug("Updating managed ProvisionWatcher: %s", watcher.name)
         self._update_provision_watcher_in_metadata(watcher)
@@ -525,7 +504,7 @@ class DeviceService(DeviceServiceSDKExt):
         """Remove the specified Watcher by name from the cache and ensure that the
         instance in Core Metadata is also removed.
 
-        Go: `RemoveProvisionWatcher(name string) error` in managedwatchers.go.  Mirrors
+        Mirrors
         the Go managed method, the watcher is only deleted from Core Metadata (a
         placeholder for now) and the cache is not updated here (as in Go).
 
@@ -536,7 +515,7 @@ class DeviceService(DeviceServiceSDKExt):
         if not ok:
             message = f"failed to find ProvisionWatcher {name} in cache"
             self._logger.error(message)
-            raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
+            raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
 
         self._logger.debug("Removing managed ProvisionWatcher: %s", watcher.name)
         self._delete_provision_watcher_from_metadata(name)
@@ -547,9 +526,6 @@ class DeviceService(DeviceServiceSDKExt):
                         device_resource: str) -> Tuple["DeviceResource", bool]:
         """Retrieve the specific DeviceResource instance from cache according to the
         Device name and Device Resource name.
-
-        Go: `DeviceResource(deviceName string, deviceResource string)
-        (models.DeviceResource, bool)` in managedprofiles.go.
         """
         device, ok = Devices().for_name(device_name)
         if not ok:
@@ -566,9 +542,6 @@ class DeviceService(DeviceServiceSDKExt):
                        command_name: str) -> Tuple["DeviceCommand", bool]:
         """Retrieve the specific DeviceCommand instance from cache according to the
         Device name and Command name.
-
-        Go: `DeviceCommand(deviceName string, commandName string)
-        (models.DeviceCommand, bool)` in managedprofiles.go.
         """
         device, ok = Devices().for_name(device_name)
         if not ok:
@@ -586,8 +559,8 @@ class DeviceService(DeviceServiceSDKExt):
     def add_device_auto_event(self, device_name: str, event: AutoEvent) -> None:
         """Add a new AutoEvent to the Device with the given name.
 
-        Go: `AddDeviceAutoEvent(deviceName string, event models.AutoEvent) error` in
-        managedautoevents.go.  When an AutoEvent with the same source name already exists
+        In
+When an AutoEvent with the same source name already exists
         its interval / on_change are updated (as in Go, this update is not persisted to
         the cache); otherwise the event is appended and the Device cache entry is updated.
         The AutoEvent executor for the Device is restarted afterwards.
@@ -599,7 +572,7 @@ class DeviceService(DeviceServiceSDKExt):
         if not ok:
             message = f"failed to find device {device_name} in cache"
             self._logger.error(message)
-            raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
+            raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
 
         found = False
         for auto_event in device.auto_events:
@@ -622,8 +595,8 @@ class DeviceService(DeviceServiceSDKExt):
     def remove_device_auto_event(self, device_name: str, event: AutoEvent) -> None:
         """Remove an AutoEvent from the Device with the given name.
 
-        Go: `RemoveDeviceAutoEvent(deviceName string, event models.AutoEvent) error` in
-        managedautoevents.go.  The matching AutoEvent is removed from the Device's
+        In
+The matching AutoEvent is removed from the Device's
         auto_events and the Device cache entry is updated; the AutoEvent executor for the
         Device is restarted afterwards.
 
@@ -634,7 +607,7 @@ class DeviceService(DeviceServiceSDKExt):
         if not ok:
             message = f"failed to find device {device_name} cannot in cache"
             self._logger.error(message)
-            raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
+            raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, message)
 
         for index, auto_event in enumerate(device.auto_events):
             if auto_event.source_name == event.source_name:
@@ -656,19 +629,18 @@ class DeviceService(DeviceServiceSDKExt):
         ``res/profiles``, ``res/devices`` and ``res/provisionwatchers`` and register them
         with the internal caches.
 
-        Python counterpart of ``device-sdk-go``'s ``provision.LoadProfiles`` /
         ``provision.LoadDevices`` / ``provision.LoadProvisionWatchers`` followed by
         ``processProfiles`` / ``processDevices`` / ``processWatchers`` which populate the
         internal caches (``cache.Profiles()`` / ``cache.Devices()`` /
-        ``cache.ProvisionWatchers()``).  The Core Metadata side of each step is a placeholder
+``cache.ProvisionWatchers()``). The Core Metadata side of each step is a placeholder
         until the app-functions-sdk-python metadata clients are ported; the cache is seeded
         directly so the controller serves the loaded entities without a round-trip to Core
-        Metadata (mirroring the Go flow, where Core Metadata already holds the entities at
+Metadata (, where Core Metadata already holds the entities at
         runtime).
 
         Each ``*_names`` argument, when provided, restricts the loaded set to the listed
         file basenames (without extension), letting a service that ships a shared ``res``
-        tree select a subset.  A missing ``res`` directory is not an error - a warning is
+tree select a subset. A missing ``res`` directory is not an error - a warning is
         logged and no entities are loaded (matches the Go behaviour where an empty/missing
         resources path yields zero profiles and devices).
 
@@ -768,11 +740,11 @@ class DeviceService(DeviceServiceSDKExt):
     def _metadata_base_url(self) -> Optional[str]:
         """Resolve the Core Metadata base URL from the configuration.
 
-        Mirrors Go ``bootstrapContainer.DeviceServiceClientFrom(dic.Get)``: the Device Service
-        talks to Core Metadata to self-register and provision its resources.  The base URL is
+        BootstrapContainer.DeviceServiceClientFrom(dic.Get)``: the Device Service
+talks to Core Metadata to self-register and provision its resources. The base URL is
         read defensively from ``configuration.clients`` (an EdgeX-style ``clients`` map) with
         the ``core-metadata`` key, falling back to the ``EDGEX_CORE_METADATA_HOST`` /
-        ``EDGEX_CORE_METADATA_PORT`` environment variables, then the localhost default.  When no
+``EDGEX_CORE_METADATA_PORT`` environment variables, then the localhost default. When no
         clients are configured the registration step is skipped entirely (the service still
         starts with its local caches).
         """
@@ -820,10 +792,10 @@ class DeviceService(DeviceServiceSDKExt):
                                         watchers: List[Any]) -> None:
         """Register the Device Service and its pre-defined resources with Core Metadata.
 
-        Mirrors the Go bootstrap order in ``pkg/service/init.go``: ``selfRegister`` first, then
-        ``provision.LoadProfiles`` / ``LoadDevices`` / ``LoadProvisionWatchers``.  Each step is
-        best-effort - a missing / down Core Metadata (or a rejected entity) is logged and does
-        not stop the Device Service from starting with its local caches.
+        Self-registration happens first, then profiles / devices / provision watchers are
+        loaded from the ``res`` tree. Each step is best-effort - a missing / down Core
+        Metadata (or a rejected entity) is logged and does not stop the Device Service
+        from starting with its local caches.
 
         Args:
             profiles: The DeviceProfile models loaded from ``res/profiles``.
@@ -843,12 +815,12 @@ class DeviceService(DeviceServiceSDKExt):
         self._add_missing_watchers(client, watchers)
 
     def _register_device_service(self, client: MetadataClient) -> None:
-        """Self-register the Device Service onto Core Metadata (Go ``selfRegister``).
+        """Self-register the Device Service onto Core Metadata.
 
         Creates the DeviceService when it does not exist yet; otherwise updates its
-        ``baseAddress`` from the local configuration (as Go does).  The ``baseAddress`` is the
+        ``baseAddress`` from the local configuration. The ``baseAddress`` is the
         URL other EdgeX services (notably core-command) use to reach this Device Service, so it
-        must be reachable from them - never ``0.0.0.0`` (a bind address).  See
+        must be reachable from them - never ``0.0.0.0`` (a bind address). See
         :meth:`_advertised_host`.
         """
         name = self.service_key
@@ -887,7 +859,7 @@ class DeviceService(DeviceServiceSDKExt):
         ``configuration.service.advertised_host``; the ``EDGEX_SERVICE_ADDRESS`` /
         ``EDGEX_SERVICE_HOST`` environment variables; the configured bind ``host`` when it is a
         concrete address (not ``0.0.0.0`` / ``::`` / empty); otherwise the machine's primary
-        hostname IP.  Extended Core services (core-command) reach this address to execute
+hostname IP. Extended Core services (core-command) reach this address to execute
         commands, so it must differ from the ``0.0.0.0`` bind host.
         """
         service = getattr(self.configuration, "service", None)
@@ -903,7 +875,7 @@ class DeviceService(DeviceServiceSDKExt):
             host = getattr(service, "host", None)
             if host and host not in ("0.0.0.0", "::", "0.0.0.0:0"):
                 return host
-        # Fall back to the primary non-loopback IP of the machine's outbound route.  This is
+# Fall back to the primary non-loopback IP of the machine's outbound route. This is
         # typically the LAN address, which containerised EdgeX core services (core-command)
         # can reach to execute commands against this Device Service.
         try:
@@ -919,7 +891,7 @@ class DeviceService(DeviceServiceSDKExt):
         return "localhost"
 
     def _device_labels(self) -> List[str]:
-        """Return the Device labels from the configuration (Go ``config.Device.Labels``)."""
+        """Return the Device labels from the configuration."""
         device = getattr(self.configuration, "device", None)
         labels = getattr(device, "labels", None) if device is not None else None
         return list(labels) if labels else []
@@ -980,6 +952,7 @@ class DeviceService(DeviceServiceSDKExt):
         broker_port = None
         base_topic_prefix = None
         message_bus_type = None
+        publish_topic_prefix = None
         optional: Dict[str, str] = {}
         auth_mode = AUTH_MODE_NONE
         if mq is not None:
@@ -988,6 +961,7 @@ class DeviceService(DeviceServiceSDKExt):
                 broker_port = mq.get("port")
                 base_topic_prefix = mq.get("base_topic_prefix")
                 message_bus_type = mq.get("type")
+                publish_topic_prefix = mq.get("publish_topic_prefix")
                 opt = mq.get("optional") or {}
                 optional = {k: str(v) for k, v in opt.items()}
                 auth_mode = mq.get("auth_mode", AUTH_MODE_NONE)
@@ -996,6 +970,7 @@ class DeviceService(DeviceServiceSDKExt):
                 broker_port = getattr(mq, "port", None)
                 base_topic_prefix = getattr(mq, "base_topic_prefix", None)
                 message_bus_type = getattr(mq, "type", None)
+                publish_topic_prefix = getattr(mq, "publish_topic_prefix", None)
                 opt = getattr(mq, "optional", None) or {}
                 optional = {k: str(v) for k, v in opt.items()}
                 auth_mode = getattr(mq, "auth_mode", AUTH_MODE_NONE)
@@ -1005,13 +980,14 @@ class DeviceService(DeviceServiceSDKExt):
                              or os.environ.get("EDGEX_MESSAGEBUS_TOPIC")
                              or "edgex")
         message_bus_type = message_bus_type or DEFAULT_MESSAGEBUS_TYPE
+        publish_topic_prefix = publish_topic_prefix or "events"
         return MessageBusConfig(
             broker_info=HostInfo(protocol="tcp", host=broker_host, port=broker_port),
             message_bus_type=message_bus_type,
             auth_mode=auth_mode,
             optional=optional,
             base_topic_prefix=base_topic_prefix,
-            publish_topic_prefix="events",
+            publish_topic_prefix=publish_topic_prefix,
         )
 
     def _init_messaging_client(self) -> None:
@@ -1022,10 +998,10 @@ class DeviceService(DeviceServiceSDKExt):
         self._message_bus_config_obj = cfg
         self._logger.debug("Initializing messaging client: %s://%s:%s",
                            cfg.broker_info.protocol, cfg.broker_info.host, cfg.broker_info.port)
-        self._messaging_client = new_message_client(cfg)
+        self._messaging_client = create_message_client(cfg)
         try:
             self._messaging_client.connect()
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc: # pylint: disable=broad-except
             self._logger.warning("Failed to connect to message bus: %s; event publishing will be unavailable",
                                  exc)
             self._messaging_client = None
@@ -1051,16 +1027,16 @@ class DeviceService(DeviceServiceSDKExt):
                     max_event_size=DEFAULT_MAX_EVENT_SIZE,
                     logger=self._logger,
                 )
-            except Exception as exc:  # pylint: disable=broad-except
+            except Exception as exc: # pylint: disable=broad-except
                 self._logger.error("Failed to publish event to message bus: %s", exc)
         return handler
 
     def _start_device_validation_handler(self) -> None:
         """Subscribe to Core Metadata's device-validation topic so device create / update calls
-        do not time out (Go ``messaging.SubscribeDeviceValidation``).
+do not time out.
 
         Runs on a background thread; a missing / down broker is logged and does not stop the
-        service.  Exposes nothing until ``run()`` so unit tests stay free of the network.
+service. Exposes nothing until ``run()`` so unit tests stay free of the network.
         """
         if getattr(self, "_validation_handler", None) is not None:
             return
@@ -1086,9 +1062,9 @@ class DeviceService(DeviceServiceSDKExt):
         """Start this Device Service. This should not be called directly by a device
         service; instead call the bootstrap entry point.
 
-        Go: `Run() error` in service.go.  Starts the AutoEvent manager, initializes and
+        Starts the AutoEvent manager, initializes and
         registers the REST controller, starts the ProtocolDriver and finally serves the
-        FastAPI application with uvicorn (blocking).  The HTTP serving depends on uvicorn;
+FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn;
         when it is not available the driver / AutoEvents are still started and a warning
         is logged.
         """
@@ -1135,7 +1111,7 @@ class DeviceService(DeviceServiceSDKExt):
         if self._messaging_client is not None:
             try:
                 self._messaging_client.disconnect()
-            except Exception as exc:  # pylint: disable=broad-except
+            except Exception as exc: # pylint: disable=broad-except
                 self._logger.debug("Error disconnecting messaging client: %s", exc)
         self._logger.info("Device Service %s shutdown complete", self.name())
 
@@ -1144,8 +1120,7 @@ class DeviceService(DeviceServiceSDKExt):
     def _start_async_pumps(self) -> None:
         """Start background threads to consume async values and discovered devices channels.
 
-        Mirrors Go `processAsyncResults` (async readings) and `processAsyncFilterAndAdd`
-        (discovered devices).  The pumps run until `_shutdown_event` is set.
+(discovered devices). The pumps run until `_shutdown_event` is set.
         """
         if self._messaging_client is None or self._message_bus_config_obj is None:
             self._logger.debug("messaging client not available; async pumps disabled")
@@ -1163,7 +1138,7 @@ class DeviceService(DeviceServiceSDKExt):
                     continue
                 try:
                     self._process_async_values(acv, cfg)
-                except Exception as exc:  # pylint: disable=broad-except
+                except Exception as exc: # pylint: disable=broad-except
                     self._logger.error("Async pump error: %s", exc)
             self._logger.debug("Async values pump stopped")
 
@@ -1177,7 +1152,7 @@ class DeviceService(DeviceServiceSDKExt):
                     continue
                 try:
                     self._process_discovered_devices(devices)
-                except Exception as exc:  # pylint: disable=broad-except
+                except Exception as exc: # pylint: disable=broad-except
                     self._logger.error("Discovered pump error: %s", exc)
             self._logger.debug("Discovered devices pump stopped")
 
@@ -1227,7 +1202,7 @@ class DeviceService(DeviceServiceSDKExt):
     def _process_discovered_devices(self, devices: List[DiscoveredDevice]) -> None:
         """Match discovered devices against ProvisionWatchers and register via Core Metadata.
 
-        Mirrors Go `processAsyncFilterAndAdd`.  Currently uses local cache only since
+        Currently uses local cache only since
         MetadataClient add_device is a placeholder (TODO: wire real client).
         """
         watchers = ProvisionWatchers().all()
@@ -1266,7 +1241,6 @@ class DeviceService(DeviceServiceSDKExt):
     def _match_provision_watcher(self, device: DiscoveredDevice, pw: Any) -> bool:
         """Check if discovered device matches ProvisionWatcher allow/block lists.
 
-        Mirrors Go `checkAllowList` and `checkBlockList`.
         """
         identifiers = getattr(pw, "identifiers", {})
         blocking = getattr(pw, "blocking_identifiers", {})
@@ -1313,7 +1287,7 @@ class DeviceService(DeviceServiceSDKExt):
                 base_topic_prefix=self._message_bus_config_obj.base_topic_prefix,
                 logger=self._logger,
             )
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc: # pylint: disable=broad-except
             self._logger.error("Failed to publish discovery progress: %s", exc)
 
     def _publish_profile_scan_progress(self, request_id: str, progress: int, message: str) -> None:
@@ -1324,13 +1298,13 @@ class DeviceService(DeviceServiceSDKExt):
             publish_system_event(
                 client=self._messaging_client,
                 service_name=self.name(),
-                event_type=DEVICE_SYSTEM_EVENT_TYPE,  # profile-scan uses device type in Go
+event_type=DEVICE_SYSTEM_EVENT_TYPE, # profile-scan uses device type in Go
                 action=SYSTEM_EVENT_ACTION_PROGRESS,
                 details={"requestId": request_id, "progress": progress, "message": message},
                 base_topic_prefix=self._message_bus_config_obj.base_topic_prefix,
                 logger=self._logger,
             )
-        except Exception as exc:  # pylint: disable=broad-except
+        except Exception as exc: # pylint: disable=broad-except
             self._logger.error("Failed to publish profile scan progress: %s", exc)
 
     # -- Command subscription (mirrors Go messaging.SubscribeCommands) --------------------
@@ -1369,7 +1343,7 @@ class DeviceService(DeviceServiceSDKExt):
     def _start_system_events_subscription(self) -> None:
         """Subscribe to Metadata system events (device/profile/watcher/service).
 
-        Mirrors Go `MetadataSystemEventsCallback`.  Topics:
+        Topics:
         - `<basePrefix>/system-events/<serviceName>/#`
         - `<basePrefix>/system-events/device-profile/delete/#`
         - Instance name: `<basePrefix>/system-events/provision-watcher/<baseServiceName>/#`
@@ -1509,14 +1483,12 @@ class DeviceService(DeviceServiceSDKExt):
     def name(self) -> str:
         """Return the name of this Device Service.
 
-        Go: `Name() string`.
         """
         return self.service_key
 
     def version(self) -> str:
         """Return the version number of this Device Service.
 
-        Go: `Version() string`.
         """
         return self.service_version
 
@@ -1525,7 +1497,7 @@ class DeviceService(DeviceServiceSDKExt):
     def async_readings_enabled(self) -> bool:
         """Return a bool value indicating whether the asynchronous reading is enabled.
 
-        Go: `AsyncReadingsEnabled() bool` (reads `config.Device.AsyncReadingsEnabled`).
+        .
         """
         device = getattr(self.configuration, "device", None)
         if device is None:
@@ -1536,7 +1508,6 @@ class DeviceService(DeviceServiceSDKExt):
         """Return the channel a developer can use to send asynchronous readings back to
         the SDK.
 
-        Go: `AsyncValuesChannel() chan *sdkModels.AsyncValues`.
         """
         return self._async_values_channel
 
@@ -1544,14 +1515,13 @@ class DeviceService(DeviceServiceSDKExt):
         """Return the channel a developer can use to send discovered devices back to the
         SDK.
 
-        Go: `DiscoveredDeviceChannel() chan []sdkModels.DiscoveredDevice`.
         """
         return self._discovered_device_channel
 
     def device_discovery_enabled(self) -> bool:
         """Return a bool value indicating whether device discovery is enabled.
 
-        Go: `DeviceDiscoveryEnabled() bool` (reads `config.Device.Discovery.Enabled`).
+        .
         """
         device = getattr(self.configuration, "device", None)
         if device is None:
@@ -1566,7 +1536,7 @@ class DeviceService(DeviceServiceSDKExt):
     def driver_configs(self) -> dict:
         """Retrieve the driver specific configuration.
 
-        Go: `DriverConfigs() map[string]string` (returns `s.config.Driver`).
+        (returns `s.config.Driver`).
         """
         configs = getattr(self.configuration, "driver", None)
         return dict(configs) if configs else {}
@@ -1577,11 +1547,9 @@ class DeviceService(DeviceServiceSDKExt):
         """Leverage the existing internal web server to add routes specific to this
         Device Service.
 
-        Go: `AddCustomRoute(route string, authentication Authentication, handler
-        func(e echo.Context) error, methods ...string) error` in service.go.  When the
-        route is added before `run()` it is queued and registered once the HTTP controller
-        exists.  The `authentication` flag is accepted for interface parity; the
-        authentication hook (Go `handlers.AutoConfigAuthenticationFunc`) is not ported yet.
+        When the route is added before `run()` it is queued and registered once the HTTP
+        controller exists. The `authentication` flag is currently accepted but the
+        authentication hook is not wired yet.
 
         Raises:
             EdgexError: When the route path is reserved by the SDK (once the controller is
@@ -1599,8 +1567,8 @@ class DeviceService(DeviceServiceSDKExt):
         """Load the service's custom configuration, processing it in the same manner as
         the standard configuration.
 
-        Go: `LoadCustomConfig(customConfig UpdatableConfig, sectionName string) error` in
-        service.go.  Stores the custom configuration so it can be included in the /config
+        In
+Stores the custom configuration so it can be included in the /config
         endpoint response; the Configuration Provider processing is not ported yet.
         """
         self.custom_config = custom_config
@@ -1614,9 +1582,8 @@ class DeviceService(DeviceServiceSDKExt):
         """Listen for changes to the specified custom configuration section.
         `load_custom_config` must have been called previously.
 
-        Go: `ListenForCustomConfigChanges(configToWatch interface{}, sectionName string,
-        changedCallback func(interface{})) error` in service.go.  The Configuration
-        Provider watcher is not ported yet, so only the precondition is enforced.
+        The Configuration Provider watcher is not wired yet, so only the precondition is
+        enforced.
 
         Raises:
             RuntimeError: When `load_custom_config` has not been called for this section.
@@ -1632,7 +1599,7 @@ class DeviceService(DeviceServiceSDKExt):
     def logging_client(self) -> "Logger":
         """Return the logging client.
 
-        Go: `LoggingClient() logger.LoggingClient`.  Returns None until the
+        Returns None until the
         app-functions-sdk-python logger client is ported.
         """
         return None
@@ -1640,7 +1607,7 @@ class DeviceService(DeviceServiceSDKExt):
     def secret_provider(self) -> Any:
         """Return the secret provider.
 
-        Go: `SecretProvider() interfaces.SecretProvider`.  Returns None until the secret
+        Returns None until the secret
         provider is ported.
         """
         return None
@@ -1649,7 +1616,7 @@ class DeviceService(DeviceServiceSDKExt):
         """Return the Metrics Manager used to register counter, gauge, gaugeFloat64 or
         timer metric types.
 
-        Go: `MetricsManager() interfaces.MetricsManager`.  Returns None until the metrics
+        Returns None until the metrics
         manager is ported.
         """
         return None
@@ -1661,9 +1628,7 @@ class DeviceService(DeviceServiceSDKExt):
                                                        message: str) -> None:
         """Publish a device discovery progress system event through the EdgeX message bus.
 
-        Go: `PublishDeviceDiscoveryProgressSystemEvent(progress, discoveredDeviceCount int,
-        message string)` in service.go.  Only logged for now; the MessageBus publishing is
-        ported in a later phase.
+        Only logged for now; the MessageBus publishing is ported in a later phase.
         """
         self._logger.info(
             "Device discovery progress: %s%%, devices discovered: %s, message: %s",
@@ -1673,9 +1638,7 @@ class DeviceService(DeviceServiceSDKExt):
                                                    message: str) -> None:
         """Publish a profile scan progress system event through the EdgeX message bus.
 
-        Go: `PublishProfileScanProgressSystemEvent(reqId string, progress int,
-        message string)` in service.go.  Only logged for now; the MessageBus publishing is
-        ported in a later phase.
+        Only logged for now; the MessageBus publishing is ported in a later phase.
         """
         self._logger.info("Profile scan progress for request %s: %s%%, message: %s",
                           req_id, progress, message)
@@ -1684,9 +1647,7 @@ class DeviceService(DeviceServiceSDKExt):
                                      details: Any) -> None:
         """Publish a generic system event through the EdgeX message bus.
 
-        Go: `PublishGenericSystemEvent(eventType, action string, details any)` in
-        service.go.  Only logged for now; the MessageBus publishing is ported in a later
-        phase.
+        Only logged for now; the MessageBus publishing is ported in a later phase.
         """
         self._logger.info("System event type: %s, action: %s, details: %s",
                           event_type, action, details)
@@ -1696,11 +1657,10 @@ class DeviceService(DeviceServiceSDKExt):
     def _add_device_to_metadata(self, device: Device, bypass_validation: bool) -> str:
         """Add the Device to Core Metadata via the metadata client and return its new id.
 
-        Mirrors `manageddevices.go`: after a successful Core Metadata write the Device is
-        refreshed into the local cache (Go `s.devices().Add(device)` after
-        `loadDeviceByUUID`).  Until the app-functions-sdk-python metadata client is wired,
-        the local cache is updated directly so the service is usable in-process; the
-        metadata side is logged as a TODO.
+        After a successful Core Metadata write the Device is refreshed into the local
+        cache. Until the app-functions-sdk-python metadata client is wired, the local
+        cache is updated directly so the service is usable in-process; the metadata side
+        is logged as a TODO.
         """
         self._logger.debug("TODO: adding Device %s to Core Metadata "
                            "(bypassValidation=%s)", device.name, bypass_validation)
@@ -1715,8 +1675,7 @@ class DeviceService(DeviceServiceSDKExt):
                                   bypass_validation: bool) -> None:
         """Patch the Device in Core Metadata with the given update map.
 
-        Mirrors `manageddevices.go`: after a successful Core Metadata patch the local
-        cache is refreshed (Go `s.devices().Update(device)` via `loadDevice`).  Until the
+        After a successful Core Metadata patch the local cache is refreshed. Until the
         metadata client is wired, the cached Device is updated directly so reads remain
         consistent; the metadata side is logged as a TODO.
         """
@@ -1737,10 +1696,9 @@ class DeviceService(DeviceServiceSDKExt):
     def _delete_device_from_metadata(self, name: str) -> None:
         """Delete the Device from Core Metadata.
 
-        Mirrors `manageddevices.go`: after a successful Core Metadata delete the local
-        cache entry is removed (Go `s.devices().RemoveByName(name)`).  Until the metadata
-        client is wired, the cache is updated directly; the metadata side is logged as a
-        TODO.
+        After a successful Core Metadata delete the local cache entry is removed. Until
+        the metadata client is wired, the cache is updated directly; the metadata side is
+        logged as a TODO.
         """
         self._logger.debug("TODO: deleting Device %s from Core Metadata", name)
         Devices().remove_by_name(name)
@@ -1749,10 +1707,9 @@ class DeviceService(DeviceServiceSDKExt):
         """Add the DeviceProfile to Core Metadata via the metadata client and return its
         new id.
 
-        Mirrors `managedprofiles.go`: after a successful Core Metadata write the Profile
-        is refreshed into the local cache (Go `s.deviceProfiles().Add(profile)`).  Until
-        the metadata client is wired, the local cache is updated directly so the service
-        is usable in-process; the metadata side is logged as a TODO.
+        After a successful Core Metadata write the Profile is refreshed into the local
+        cache. Until the metadata client is wired, the local cache is updated directly so
+        the service is usable in-process; the metadata side is logged as a TODO.
         """
         self._logger.debug("TODO: adding Profile %s to Core Metadata", profile.name)
         if not profile.id:
@@ -1764,10 +1721,9 @@ class DeviceService(DeviceServiceSDKExt):
     def _update_profile_in_metadata(self, profile: DeviceProfile) -> None:
         """Update the DeviceProfile in Core Metadata.
 
-        Mirrors `managedprofiles.go`: after a successful Core Metadata update the local
-        cache is refreshed (Go `s.deviceProfiles().Update(profile)`).  Until the metadata
-        client is wired, the cached Profile is updated directly; the metadata side is
-        logged as a TODO.
+        After a successful Core Metadata update the local cache is refreshed. Until the
+        metadata client is wired, the cached Profile is updated directly; the metadata
+        side is logged as a TODO.
         """
         self._logger.debug("TODO: updating Profile %s in Core Metadata", profile.name)
         Profiles().update(profile)
@@ -1776,7 +1732,7 @@ class DeviceService(DeviceServiceSDKExt):
         """Delete the DeviceProfile from Core Metadata.
 
         TODO: wire the app-functions-sdk-python metadata client
-        (`device_profile_client.delete_by_name(name)`).  Until then the call is only
+(`device_profile_client.delete_by_name(name)`). Until then the call is only
         logged.
         """
         self._logger.debug("TODO: deleting Profile %s from Core Metadata", name)
@@ -1786,7 +1742,7 @@ class DeviceService(DeviceServiceSDKExt):
         its new id.
 
         TODO: wire the app-functions-sdk-python metadata client
-        (`provision_watcher_client.add(...)`).  Until then a generated UUID is returned
+(`provision_watcher_client.add(...)`). Until then a generated UUID is returned
         and the call is only logged.
         """
         self._logger.debug("TODO: adding ProvisionWatcher %s to Core Metadata",
@@ -1802,7 +1758,7 @@ class DeviceService(DeviceServiceSDKExt):
         """Update the ProvisionWatcher in Core Metadata.
 
         TODO: wire the app-functions-sdk-python metadata client
-        (`provision_watcher_client.update(...)`).  Until then the caller is notified.
+(`provision_watcher_client.update(...)`). Until then the caller is notified.
         """
         self._logger.debug("TODO: updating ProvisionWatcher %s in Core Metadata",
                            watcher.name)
@@ -1812,14 +1768,14 @@ class DeviceService(DeviceServiceSDKExt):
         """Delete the ProvisionWatcher from Core Metadata.
 
         TODO: wire the app-functions-sdk-python metadata client
-        (`provision_watcher_client.delete_by_name(name)`).  Until then the call is only
+(`provision_watcher_client.delete_by_name(name)`). Until then the call is only
         logged.
         """
         self._logger.debug("TODO: deleting ProvisionWatcher %s from Core Metadata", name)
         ProvisionWatchers().remove_by_name(name)
 
     def _start_auto_events(self) -> None:
-        """Start the AutoEvent manager (Go `autoevent.NewBootstrap(...).BootstrapHandler`).
+        """Start the AutoEvent manager.
 
         The manager module (`internal.autoevent.manager`) is not ported yet, so a lazy
         import is attempted and its absence is only logged.
@@ -1846,11 +1802,9 @@ class DeviceService(DeviceServiceSDKExt):
     def _auto_event_manager(self) -> Any:
         """Lazily import and return the AutoEvent manager singleton.
 
-        Mirrors the Go DI container's `autoevent.Manager` (created by
-        `autoevent.NewBootstrap(pool).BootstrapHandler`).  The Python
-        `internal.autoevent.manager` module is ported in a later phase; until then this
-        returns None.  Any import / attribute error is logged and treated as "not ported
-        yet" so the service keeps running.
+        The `internal.autoevent.manager` module is ported in a later phase; until then
+        this returns None. Any import / attribute error is logged and treated as "not
+        ported yet" so the service keeps running.
         """
         if self._auto_event_manager_instance is None:
             try:
@@ -1863,7 +1817,7 @@ class DeviceService(DeviceServiceSDKExt):
 
     def _init_http_controller(self) -> None:
         """Initialize the REST controller, register the SDK reserved routes and any queued
-        custom routes (mirrors the Go `NewBootstrap(s, router).BootstrapHandler`).
+        custom routes.
         """
         if self.controller is not None:
             return
@@ -1899,17 +1853,8 @@ class DeviceService(DeviceServiceSDKExt):
         return host, int(port)
 
 
-def new_device_service(service_key: str, service_version: str, driver: Any,
-                       configuration: Any = None,
-                       logger: Optional[logging.Logger] = None) -> DeviceService:
-    """Create a new `DeviceService` for the specified key, version and driver.
-
-    Python counterpart of `service.NewDeviceService(serviceKey, serviceVersion, driver)`
-    in service.go which returns an `interfaces.DeviceServiceSDKExt` (typed as
-    `interfaces.DeviceServiceSDK`).
-    """
+def create_device_service(service_key: str, service_version: str, driver: Any,
+                          configuration: Any = None,
+                          logger: Optional[logging.Logger] = None) -> DeviceService:
+    """Create a `DeviceService` for the specified key, version and driver."""
     return DeviceService(service_key, service_version, driver, configuration, logger)
-
-
-# PascalCase alias kept for parity with the Go exported identifier.
-NewDeviceService = new_device_service

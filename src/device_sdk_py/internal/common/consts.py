@@ -2,13 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The common constants of the EdgeX Device Service SDK - ported from
 `device-sdk-go/internal/common/consts.go` and `go-mod-core-contracts/v4/common`.
 
 `consts.go` only defines a handful of SDK specific constants (`URLRawQuery`,
-`SDKReservedPrefix`, ...); the service API routes (`ApiPingRoute`,
-`ApiDeviceNameCommandNameRoute`, ...), the HTTP headers and the path / query parameter
-names are imported from `go-mod-core-contracts/v4/common`.  This module merges both sets
+`SDKReservedPrefix`,...); the service API routes (`ApiPingRoute`,
+`ApiDeviceNameCommandNameRoute`,...), the HTTP headers and the path / query parameter
+names are imported from `go-mod-core-contracts/v4/common`. This module merges both sets
 of constants so that the Python SDK has a single home for them, mirroring the (now
 exported) constants of the `app_functions_sdk_py.contracts.common.constants` module.
 """
@@ -68,11 +67,11 @@ OPERATING_STATE_DOWN = "DOWN"
 # ---------------------------------------------------------------------------
 
 #: The key used to store the un-filtered query parameters in a CommandRequest's
-#: attributes map (Go `URLRawQuery`).
+#: attributes map.
 URL_RAW_QUERY = "urlRawQuery"
 
 #: The prefix used to separate the SDK reserved query parameters from the ones passed
-#: through to the ProtocolDriver (Go `SDKReservedPrefix`).
+#: through to the ProtocolDriver.
 SDK_RESERVED_PREFIX = "ds-"
 
 #: Indicates the version of the SDK - overwritten by the build.

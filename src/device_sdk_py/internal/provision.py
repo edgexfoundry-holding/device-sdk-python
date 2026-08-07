@@ -1,17 +1,16 @@
 # Copyright (C) 2026 YIQISOFT
 # SPDX-License-Identifier: Apache-2.0
 """
-Pre-defined resource loading - ported from `device-sdk-go/internal/provision`
 (`LoadProfiles` / `LoadDevices` / `LoadProvisionWatchers`).
 
 A device service ships its DeviceProfiles, Devices and ProvisionWatchers as files under
-``res/profiles``, ``res/devices`` and ``res/provisionwatchers``.  At startup the SDK reads
+``res/profiles``, ``res/devices`` and ``res/provisionwatchers``. At startup the SDK reads
 every ``.json`` / ``.yaml`` / ``.yml`` file in those directories and populates the internal
-caches with the parsed entities (mirroring the Go ``processProfiles`` / ``processDevices`` /
+caches with the parsed entities (processProfiles`` / ``processDevices`` /
 ``processWatchers`` steps that seed ``cache.Profiles()`` / ``cache.Devices()`` /
 ``cache.ProvisionWatchers()``).
 
-Both JSON and YAML encodings are accepted.  The EdgeX DTO files use canonical camelCase
+Both JSON and YAML encodings are accepted. The EdgeX DTO files use canonical camelCase
 keys (e.g. ``valueType``, ``readWrite``, ``deviceResources``); the loaders read those keys
 directly so the *structural* fields map onto the Python models while *free-form* maps -
 Device protocols, resource attributes, ProvisionWatcher identifiers, tags - keep their
@@ -85,7 +84,7 @@ def _as_str(value: Any) -> str:
 
 def _as_str_map(value: Any) -> Dict[str, str]:
     """Coerce a mapping's values to strings (EdgeX protocol properties / identifiers are
-    `map[string]string`).  Keys are preserved unchanged."""
+`map[string]string`). Keys are preserved unchanged."""
     if not isinstance(value, dict):
         return {}
     return {str(k): ("" if v is None else str(v)) for k, v in value.items()}
@@ -104,7 +103,7 @@ def _as_str_list(value: Any) -> List[str]:
 
 def _as_str_map_of_lists(value: Any) -> Dict[str, List[str]]:
     """Coerce a mapping's values to string lists (ProvisionWatcher blocking identifiers
-    are `map[string][]string`).  Keys are preserved unchanged."""
+are `map[string][]string`). Keys are preserved unchanged."""
     if not isinstance(value, dict):
         return {}
     return {str(k): _as_str_list(v) for k, v in value.items()}
@@ -333,7 +332,7 @@ def load_provision_watchers(path: str, logger: logging.Logger = _LOGGER) -> List
     for file_path in _scan_files(path):
         try:
             parsed = _parse_file(file_path)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc: # noqa: BLE001
             logger.warning("failed to parse ProvisionWatcher %s: %s", file_path, exc)
             continue
         for item in _normalize_watcher_list(parsed):

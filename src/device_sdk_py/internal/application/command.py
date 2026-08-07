@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The command application functions - ported from
 `device-sdk-go/internal/application/command.go`.
 
 `command_read` and `command_write` implement the application logic behind the REST
@@ -13,7 +12,7 @@ invoke the ProtocolDriver read / write handlers and convert the resulting Comman
 into an `Event` via the transformer.
 
 The Go functions receive their dependencies (driver, configuration, device service model)
-from the DI container; the Python port passes them as explicit arguments instead.  Errors
+from the DI container; the Python port passes them as explicit arguments instead. Errors
 are reported by raising `EdgexError` (the counterpart of the Go `errors.EdgeX` return
 values), and the write-parameter value coercion is implemented by
 `create_command_value_from_device_resource` which mirrors `createCommandValueFromDeviceResource`.
@@ -49,7 +48,7 @@ from ..common.utils import (
     KIND_SERVER_ERROR,
     KIND_SERVICE_LOCKED,
     EdgexError,
-    new_edgx_error,
+    create_edgx_error,
     update_operating_state,
 )
 from ...models import (
@@ -81,7 +80,7 @@ from ...models import (
     VALUETYPE_UINT8_ARRAY,
     CommandRequest,
     CommandValue,
-    new_command_value,
+    create_command_value,
 )
 from ..transformer.transform import Event, command_values_to_event
 from ..transformer.transformparam import (
@@ -96,14 +95,14 @@ from ..transformer.transformresult import (
 _logger = logging.getLogger(__name__)
 
 #: The module level map of allowed request failures per Device, mirroring the
-#: `AllowedRequestFailuresTracker` from the Go DI container.  It is only used when the
+#: `AllowedRequestFailuresTracker` from the Go DI container. It is only used when the
 #: configuration enables the Device Down auto-recovery (`AllowedFails` / `DeviceDownTimeout`).
 _allowed_request_failures: Dict[str, int] = {}
 
 
 def _device_option(configuration: Any, name: str, default: Any) -> Any:
     """Return the `configuration.device.<name>` option, or `default` when the
-    configuration (or the option) is not set.  The Python configuration model is ported
+configuration (or the option) is not set. The Python configuration model is ported
     in a later phase, so the Device options are read defensively."""
     device = getattr(configuration, "device", None)
     if device is None:
@@ -114,7 +113,6 @@ def _device_option(configuration: Any, name: str, default: Any) -> Any:
 def set_failure_count(device_name: str, count: int) -> None:
     """Set the number of allowed request failures for the Device with the given name.
 
-    Mirrors `AllowedRequestFailuresTracker.Set(deviceName, count)`.
     """
     _allowed_request_failures[device_name] = count
 
@@ -122,7 +120,6 @@ def set_failure_count(device_name: str, count: int) -> None:
 def failure_count(device_name: str) -> int:
     """Return the remaining number of allowed request failures for the Device.
 
-    Mirrors `AllowedRequestFailuresTracker.Value(deviceName)`.
     """
     return _allowed_request_failures.get(device_name, 0)
 
@@ -130,7 +127,6 @@ def failure_count(device_name: str) -> int:
 def decrease_failure_count(device_name: str) -> int:
     """Decrease the allowed request failures count by one and return the new value.
 
-    Mirrors `AllowedRequestFailuresTracker.Decrease(deviceName)`.
     """
     _allowed_request_failures[device_name] = \
         _allowed_request_failures.get(device_name, 0) - 1
@@ -142,7 +138,7 @@ def device_request_failed(device_name: str, configuration: Any,
     """Record a failed Device request and, once the allowed failures are exhausted, mark
     the Device as non-operational.
 
-    Mirrors `DeviceRequestFailed(deviceName, dic)` in devicereturn.go.  The Core Metadata
+    The Core Metadata
     update and the background retry loop (`deviceReturn`) are deferred to the port of
     devicereturn.go; this function only tracks the failures and updates the local state.
     """
@@ -165,7 +161,6 @@ def device_request_succeeded(device: Device, configuration: Any,
     """Record a successful Device request, resetting the allowed failures count and
     restoring the Device operating state when it was down.
 
-    Mirrors `DeviceRequestSucceeded(d, dic)` in devicereturn.go.
     """
     log = logger or _logger
     allowed_fails = _device_option(configuration, "allowed_fails", 0)
@@ -182,8 +177,8 @@ def command_read(device_name: str, request_id: str, command_name: str, *,
                  logger: Optional[logging.Logger] = None) -> Optional[Event]:
     """Execute a Get (read) command on the Device with the given name.
 
-    Mirrors `GetCommand(ctx, deviceName, commandName, queryParams, regexCmd, dic)` in
-    command.go.  When the name refers to a DeviceCommand the whole command is read; a
+    In
+When the name refers to a DeviceCommand the whole command is read; a
     regular expression (default, unless `ds-regexcommand=false`) reads all matching
     DeviceResources, otherwise the name is treated as a single DeviceResource.
 
@@ -206,9 +201,9 @@ def command_read(device_name: str, request_id: str, command_name: str, *,
     """
     log = logger or _logger
     if device_name == "":
-        raise new_edgx_error(KIND_CONTRACT_INVALID, "device name is empty")
+        raise create_edgx_error(KIND_CONTRACT_INVALID, "device name is empty")
     if command_name == "":
-        raise new_edgx_error(KIND_CONTRACT_INVALID, "command is empty")
+        raise create_edgx_error(KIND_CONTRACT_INVALID, "command is empty")
 
     try:
         device = _validate_service_and_device_state(device_name, configuration,
@@ -240,8 +235,8 @@ def command_write(device_name: str, request_id: str, command_name: str, *,
                   logger: Optional[logging.Logger] = None) -> Optional[Event]:
     """Execute a Set (write) command on the Device with the given name.
 
-    Mirrors `SetCommand(ctx, deviceName, commandName, queryParams, requests, dic)` in
-    command.go.  When the name refers to a DeviceCommand all its ResourceOperations are
+    In
+When the name refers to a DeviceCommand all its ResourceOperations are
     written, otherwise the name is treated as a single DeviceResource.
 
     Args:
@@ -264,9 +259,9 @@ def command_write(device_name: str, request_id: str, command_name: str, *,
     """
     log = logger or _logger
     if device_name == "":
-        raise new_edgx_error(KIND_CONTRACT_INVALID, "device name is empty")
+        raise create_edgx_error(KIND_CONTRACT_INVALID, "device name is empty")
     if command_name == "":
-        raise new_edgx_error(KIND_CONTRACT_INVALID, "command is empty")
+        raise create_edgx_error(KIND_CONTRACT_INVALID, "command is empty")
 
     try:
         device = _validate_service_and_device_state(device_name, configuration,
@@ -296,15 +291,14 @@ def _read_device_resource(device: Device, resource_name: str, attributes: str,
                           driver: Any, configuration: Any) -> Optional[Event]:
     """Read a single DeviceResource and convert the result to an Event.
 
-    Mirrors `readDeviceResource(device, resourceName, attributes, dic)` in command.go.
     """
     dr, ok = Profiles().device_resource(device.profile_name, resource_name)
     if not ok:
-        raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST,
+        raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST,
                              f"DeviceResource {resource_name} not found")
     # check the device resource is not write-only
     if dr.properties.read_write == READ_WRITE_W:
-        raise new_edgx_error(KIND_NOT_ALLOWED,
+        raise create_edgx_error(KIND_NOT_ALLOWED,
                              f"DeviceResource {dr.name} is marked as write-only")
 
     # prepare the CommandRequest
@@ -326,19 +320,19 @@ def _read_device_resources_regex(device: Device, regex_resource_name: str,
     """Read all DeviceResources whose name matches the regexp and convert the results to
     an Event.
 
-    Mirrors `readDeviceResourcesRegex(device, regexResourceName, attributes, dic)` in
-    command.go.  Go compiles the regexp in POSIX (leftmost-longest) mode; Python's `re`
+    In
+The reference implementation compiles the regexp in POSIX (leftmost-longest) mode; Python's `re`
     has no POSIX mode so the plain module regexp is used.
     """
     try:
         regex = re.compile(regex_resource_name)
     except re.error as exc:
-        raise new_edgx_error(KIND_CONTRACT_INVALID,
+        raise create_edgx_error(KIND_CONTRACT_INVALID,
                              "failed to CompilePOSIX resource name") from exc
 
     device_resources, ok = Profiles().device_resources_by_regex(device.profile_name, regex)
     if not ok or len(device_resources) == 0:
-        raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST,
+        raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST,
                              f"Regex DeviceResource {regex_resource_name} not found")
 
     reqs: List[CommandRequest] = []
@@ -356,7 +350,7 @@ def _read_device_resources_regex(device: Device, regex_resource_name: str,
         reqs.append(req)
 
     if len(reqs) == 0:
-        raise new_edgx_error(KIND_NOT_ALLOWED,
+        raise create_edgx_error(KIND_NOT_ALLOWED,
                              f"no readable resources matched with {regex_resource_name}")
 
     results = _handle_read_commands(
@@ -369,20 +363,19 @@ def _read_device_command(device: Device, command_name: str, attributes: str,
                          driver: Any, configuration: Any) -> Optional[Event]:
     """Read the DeviceCommand and convert the result to an Event.
 
-    Mirrors `readDeviceCommand(device, commandName, attributes, dic)` in command.go.
     """
     dc, ok = Profiles().device_command(device.profile_name, command_name)
     if not ok:
-        raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST,
+        raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST,
                              f"DeviceCommand {command_name} not found")
     # check the device command is not write-only
     if dc.read_write == READ_WRITE_W:
-        raise new_edgx_error(KIND_NOT_ALLOWED,
+        raise create_edgx_error(KIND_NOT_ALLOWED,
                              f"DeviceCommand {dc.name} is marked as write-only")
     # check the ResourceOperation count does not exceed MaxCmdOps defined in configuration
     max_cmd_ops = _device_option(configuration, "max_cmd_ops", 0)
     if max_cmd_ops > 0 and len(dc.resource_operations) > max_cmd_ops:
-        raise new_edgx_error(
+        raise create_edgx_error(
             KIND_SERVER_ERROR,
             f"GET command {dc.name} exceed device {device.name} MaxCmdOps ({max_cmd_ops})")
 
@@ -393,7 +386,7 @@ def _read_device_command(device: Device, command_name: str, attributes: str,
         # check the DeviceResource in the ResourceOperation actually exists
         dr, ok = Profiles().device_resource(device.profile_name, dr_name)
         if not ok:
-            raise new_edgx_error(
+            raise create_edgx_error(
                 KIND_SERVER_ERROR,
                 f"DeviceResource {dr_name} in GET commnd {dc.name} for {device.name} "
                 f"not defined")
@@ -418,16 +411,15 @@ def _write_device_resource(device: Device, resource_name: str, attributes: str,
                            configuration: Any) -> Optional[Event]:
     """Write a single DeviceResource and convert the result to an Event.
 
-    Mirrors `writeDeviceResource(device, resourceName, attributes, requests, dic)` in
-    command.go.
+    In
     """
     dr, ok = Profiles().device_resource(device.profile_name, resource_name)
     if not ok:
-        raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST,
+        raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST,
                              f"DeviceResource {resource_name} not found")
     # check the device resource is not read-only
     if dr.properties.read_write == READ_WRITE_R:
-        raise new_edgx_error(KIND_NOT_ALLOWED,
+        raise create_edgx_error(KIND_NOT_ALLOWED,
                              f"DeviceResource {dr.name} is marked as read-only")
 
     # check the set parameters contain the provided DeviceResource
@@ -436,7 +428,7 @@ def _write_device_resource(device: Device, resource_name: str, attributes: str,
         if dr.properties.default_value != "":
             value = dr.properties.default_value
         else:
-            raise new_edgx_error(
+            raise create_edgx_error(
                 KIND_SERVER_ERROR,
                 f"DeviceResource {dr.name} not found in request body and no default "
                 f"value defined")
@@ -445,7 +437,7 @@ def _write_device_resource(device: Device, resource_name: str, attributes: str,
     try:
         cv = create_command_value_from_device_resource(dr, value)
     except EdgexError as exc:
-        raise new_edgx_error(KIND_CONTRACT_INVALID, "failed to create CommandValue") \
+        raise create_edgx_error(KIND_CONTRACT_INVALID, "failed to create CommandValue") \
             from exc
 
     # prepare the CommandRequest
@@ -474,21 +466,20 @@ def _write_device_command(device: Device, command_name: str, attributes: str,
                           configuration: Any) -> Optional[Event]:
     """Write the DeviceCommand and convert the result to an Event.
 
-    Mirrors `writeDeviceCommand(device, commandName, attributes, requests, dic)` in
-    command.go.
+    In
     """
     dc, ok = Profiles().device_command(device.profile_name, command_name)
     if not ok:
-        raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST,
+        raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST,
                              f"DeviceCommand {command_name} not found")
     # check the device command is not read-only
     if dc.read_write == READ_WRITE_R:
-        raise new_edgx_error(KIND_NOT_ALLOWED,
+        raise create_edgx_error(KIND_NOT_ALLOWED,
                              f"DeviceCommand {dc.name} is marked as read-only")
     # check the ResourceOperation count does not exceed MaxCmdOps defined in configuration
     max_cmd_ops = _device_option(configuration, "max_cmd_ops", 0)
     if max_cmd_ops > 0 and len(dc.resource_operations) > max_cmd_ops:
-        raise new_edgx_error(
+        raise create_edgx_error(
             KIND_SERVER_ERROR,
             f"SET command {dc.name} exceed device {device.name} MaxCmdOps ({max_cmd_ops})")
 
@@ -499,7 +490,7 @@ def _write_device_command(device: Device, command_name: str, attributes: str,
         # check the DeviceResource in the ResourceOperation actually exists
         dr, ok = Profiles().device_resource(device.profile_name, dr_name)
         if not ok:
-            raise new_edgx_error(
+            raise create_edgx_error(
                 KIND_SERVER_ERROR,
                 f"DeviceResource {dr_name} in SET commnd {dc.name} for {device.name} "
                 f"not defined")
@@ -512,7 +503,7 @@ def _write_device_command(device: Device, command_name: str, attributes: str,
             elif dr.properties.default_value != "":
                 value = dr.properties.default_value
             else:
-                raise new_edgx_error(
+                raise create_edgx_error(
                     KIND_SERVER_ERROR,
                     f"DeviceResource {dr.name} not found in request body and no default "
                     f"value defined")
@@ -529,7 +520,7 @@ def _write_device_command(device: Device, command_name: str, attributes: str,
         try:
             cv = create_command_value_from_device_resource(dr, value)
         except EdgexError as exc:
-            raise new_edgx_error(KIND_CONTRACT_INVALID, "failed to create CommandValue") \
+            raise create_edgx_error(KIND_CONTRACT_INVALID, "failed to create CommandValue") \
                 from exc
         cvs.append(cv)
 
@@ -562,7 +553,7 @@ def _write_device_command(device: Device, command_name: str, attributes: str,
 
 def _set_attributes_query(req: CommandRequest, attributes: str) -> None:
     """Store the raw query parameters in the CommandRequest attributes under the
-    `urlRawQuery` key (mirrors the Go `req.Attributes[sdkCommon.URLRawQuery] = attributes`).
+`urlRawQuery` key ().
     """
     if attributes != "":
         if len(req.attributes) <= 0:
@@ -573,36 +564,36 @@ def _set_attributes_query(req: CommandRequest, attributes: str) -> None:
 def _handle_read_commands(driver: Any, device: Device, reqs: List[CommandRequest],
                           error_message: str) -> List[CommandValue]:
     """Execute the protocol-specific read operation, wrapping driver exceptions in an
-    `EdgexError` with the given message (mirrors the Go `driver.HandleReadCommands` call
+`EdgexError` with the given message ( call
     and its error wrapping).
     """
     try:
         results = driver.handle_read_commands(device.name, device.protocols, reqs)
     except Exception as exc:
-        raise new_edgx_error(KIND_SERVER_ERROR, error_message) from exc
+        raise create_edgx_error(KIND_SERVER_ERROR, error_message) from exc
     return list(results) if results is not None else []
 
 
 def _handle_write_commands(driver: Any, device: Device, reqs: List[CommandRequest],
                            params: List[CommandValue], error_message: str) -> None:
     """Execute the protocol-specific write operation, wrapping driver exceptions in an
-    `EdgexError` with the given message (mirrors the Go `driver.HandleWriteCommands` call
+`EdgexError` with the given message ( call
     and its error wrapping).
     """
     try:
         driver.handle_write_commands(device.name, device.protocols, reqs, params)
     except Exception as exc:
-        raise new_edgx_error(KIND_SERVER_ERROR, error_message) from exc
+        raise create_edgx_error(KIND_SERVER_ERROR, error_message) from exc
 
 
 def _transform_write_parameter(cv: CommandValue, properties: Any) -> None:
     """Apply the incoming write data transformation, wrapping transformation failures in
-    an `EdgexError` of kind ContractInvalid (mirrors the Go call and its error wrapping).
+an `EdgexError` of kind ContractInvalid ( and its error wrapping).
     """
     try:
         transform_write_parameter(cv, properties)
     except (WriteParameterError, TransformerError) as exc:
-        raise new_edgx_error(KIND_CONTRACT_INVALID,
+        raise create_edgx_error(KIND_CONTRACT_INVALID,
                              "failed to transform set parameter") from exc
 
 
@@ -610,13 +601,13 @@ def _command_values_to_event(results: List[CommandValue], device: Device,
                              source_name: str,
                              configuration: Any) -> Optional[Event]:
     """Convert the CommandValues produced by the driver into an Event via the transformer
-    (mirrors the Go `transformer.CommandValuesToEventDTO` call and its error wrapping).
+( call and its error wrapping).
     """
     data_transform = _device_option(configuration, "data_transform", True)
     try:
         return command_values_to_event(results, device.name, source_name, data_transform)
     except TransformerError as exc:
-        raise new_edgx_error(KIND_SERVER_ERROR,
+        raise create_edgx_error(KIND_SERVER_ERROR,
                              "failed to convert CommandValue to Event") from exc
 
 
@@ -625,7 +616,7 @@ def _validate_service_and_device_state(device_name: str, configuration: Any,
     """Validate that the Device Service and the Device are in a state that allows
     commands.
 
-    Mirrors `validateServiceAndDeviceState(deviceName, dic)` in command.go.  The
+    The
     `device_service` is the DeviceService model whose `admin_state` is checked; the
     `configuration` provides the `allowed_fails` / `device_down_timeout` options used when
     the Device OperatingState is DOWN.
@@ -633,20 +624,20 @@ def _validate_service_and_device_state(device_name: str, configuration: Any,
     # check the Device Service AdminState
     if device_service is not None and \
             getattr(device_service, "admin_state", None) == ADMIN_STATE_LOCKED:
-        raise new_edgx_error(KIND_SERVICE_LOCKED, "service locked")
+        raise create_edgx_error(KIND_SERVICE_LOCKED, "service locked")
 
     # check the requested Device exists
     device, ok = Devices().for_name(device_name)
     if not ok:
-        raise new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, f"device {device_name} not found")
+        raise create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST, f"device {device_name} not found")
 
     # check the Device's AdminState
     if device.admin_state == ADMIN_STATE_LOCKED:
-        raise new_edgx_error(KIND_SERVICE_LOCKED, f"device {device.name} locked")
+        raise create_edgx_error(KIND_SERVICE_LOCKED, f"device {device.name} locked")
     # check the Device's OperatingState; if it is a device return attempt, the operating
     # state is allowed to be DOWN
     if device.operating_state == OPERATING_STATE_DOWN:
-        err = new_edgx_error(KIND_SERVICE_LOCKED,
+        err = create_edgx_error(KIND_SERVICE_LOCKED,
                              f"device {device.name} OperatingState is DOWN")
         if _device_option(configuration, "allowed_fails", 0) == 0 or \
                 _device_option(configuration, "device_down_timeout", 0) == 0:
@@ -656,7 +647,7 @@ def _validate_service_and_device_state(device_name: str, configuration: Any,
 
     # check the Device's ProfileName
     if device.profile_name == "":
-        raise new_edgx_error(KIND_SERVICE_LOCKED, "no associated device profile")
+        raise create_edgx_error(KIND_SERVICE_LOCKED, "no associated device profile")
 
     return device
 
@@ -669,8 +660,7 @@ def create_command_value_from_device_resource(dr: Any,
     """Create a CommandValue from the request value coerced to the DeviceResource value
     type.
 
-    Mirrors `createCommandValueFromDeviceResource(dr models.DeviceResource, value any)`
-    in command.go.  A `None` value produces a CommandValue with a `None` value; otherwise
+A `None` value produces a CommandValue with a `None` value; otherwise
     the value is stringified and converted according to `dr.properties.value_type`
     (JSON for the array / Object types, `strconv` semantics for the scalar types, base64
     big-endian decoding for the float fallback).
@@ -690,94 +680,92 @@ def create_command_value_from_device_resource(dr: Any,
     value_type = dr.properties.value_type
 
     if value_type != VALUETYPE_STRING and v.strip() == "":
-        raise new_edgx_error(
+        raise create_edgx_error(
             KIND_CONTRACT_INVALID,
             f"empty string is invalid for {value_type} value type")
 
     if value_type == VALUETYPE_STRING:
-        return new_command_value(dr.name, VALUETYPE_STRING, v)
+        return create_command_value(dr.name, VALUETYPE_STRING, v)
     if value_type == VALUETYPE_STRING_ARRAY:
-        return new_command_value(dr.name, VALUETYPE_STRING_ARRAY,
+        return create_command_value(dr.name, VALUETYPE_STRING_ARRAY,
                                  _json_array(v, VALUETYPE_STRING_ARRAY))
     if value_type == VALUETYPE_BOOL:
-        return new_command_value(dr.name, VALUETYPE_BOOL, _parse_bool(v, value_type))
+        return create_command_value(dr.name, VALUETYPE_BOOL, _parse_bool(v, value_type))
     if value_type == VALUETYPE_BOOL_ARRAY:
-        return new_command_value(dr.name, VALUETYPE_BOOL_ARRAY,
+        return create_command_value(dr.name, VALUETYPE_BOOL_ARRAY,
                                  _json_array(v, VALUETYPE_BOOL_ARRAY))
     if value_type == VALUETYPE_UINT8:
-        return new_command_value(dr.name, VALUETYPE_UINT8, _parse_uint(v, 8, value_type))
+        return create_command_value(dr.name, VALUETYPE_UINT8, _parse_uint(v, 8, value_type))
     if value_type == VALUETYPE_UINT8_ARRAY:
-        return new_command_value(dr.name, VALUETYPE_UINT8_ARRAY,
+        return create_command_value(dr.name, VALUETYPE_UINT8_ARRAY,
                                  _parse_uint_array(v, 8, value_type))
     if value_type == VALUETYPE_UINT16:
-        return new_command_value(dr.name, VALUETYPE_UINT16, _parse_uint(v, 16, value_type))
+        return create_command_value(dr.name, VALUETYPE_UINT16, _parse_uint(v, 16, value_type))
     if value_type == VALUETYPE_UINT16_ARRAY:
-        return new_command_value(dr.name, VALUETYPE_UINT16_ARRAY,
+        return create_command_value(dr.name, VALUETYPE_UINT16_ARRAY,
                                  _parse_uint_array(v, 16, value_type))
     if value_type == VALUETYPE_UINT32:
-        return new_command_value(dr.name, VALUETYPE_UINT32, _parse_uint(v, 32, value_type))
+        return create_command_value(dr.name, VALUETYPE_UINT32, _parse_uint(v, 32, value_type))
     if value_type == VALUETYPE_UINT32_ARRAY:
-        return new_command_value(dr.name, VALUETYPE_UINT32_ARRAY,
+        return create_command_value(dr.name, VALUETYPE_UINT32_ARRAY,
                                  _parse_uint_array(v, 32, value_type))
     if value_type == VALUETYPE_UINT64:
-        return new_command_value(dr.name, VALUETYPE_UINT64, _parse_uint(v, 64, value_type))
+        return create_command_value(dr.name, VALUETYPE_UINT64, _parse_uint(v, 64, value_type))
     if value_type == VALUETYPE_UINT64_ARRAY:
-        return new_command_value(dr.name, VALUETYPE_UINT64_ARRAY,
+        return create_command_value(dr.name, VALUETYPE_UINT64_ARRAY,
                                  _parse_uint_array(v, 64, value_type))
     if value_type == VALUETYPE_INT8:
-        return new_command_value(dr.name, VALUETYPE_INT8, _parse_int(v, 8, value_type))
+        return create_command_value(dr.name, VALUETYPE_INT8, _parse_int(v, 8, value_type))
     if value_type == VALUETYPE_INT8_ARRAY:
-        return new_command_value(dr.name, VALUETYPE_INT8_ARRAY,
+        return create_command_value(dr.name, VALUETYPE_INT8_ARRAY,
                                  _parse_int_array(v, 8, value_type))
     if value_type == VALUETYPE_INT16:
-        return new_command_value(dr.name, VALUETYPE_INT16, _parse_int(v, 16, value_type))
+        return create_command_value(dr.name, VALUETYPE_INT16, _parse_int(v, 16, value_type))
     if value_type == VALUETYPE_INT16_ARRAY:
-        return new_command_value(dr.name, VALUETYPE_INT16_ARRAY,
+        return create_command_value(dr.name, VALUETYPE_INT16_ARRAY,
                                  _parse_int_array(v, 16, value_type))
     if value_type == VALUETYPE_INT32:
-        return new_command_value(dr.name, VALUETYPE_INT32, _parse_int(v, 32, value_type))
+        return create_command_value(dr.name, VALUETYPE_INT32, _parse_int(v, 32, value_type))
     if value_type == VALUETYPE_INT32_ARRAY:
-        return new_command_value(dr.name, VALUETYPE_INT32_ARRAY,
+        return create_command_value(dr.name, VALUETYPE_INT32_ARRAY,
                                  _parse_int_array(v, 32, value_type))
     if value_type == VALUETYPE_INT64:
-        return new_command_value(dr.name, VALUETYPE_INT64, _parse_int(v, 64, value_type))
+        return create_command_value(dr.name, VALUETYPE_INT64, _parse_int(v, 64, value_type))
     if value_type == VALUETYPE_INT64_ARRAY:
-        return new_command_value(dr.name, VALUETYPE_INT64_ARRAY,
+        return create_command_value(dr.name, VALUETYPE_INT64_ARRAY,
                                  _parse_int_array(v, 64, value_type))
     if value_type == VALUETYPE_FLOAT32:
-        return new_command_value(dr.name, VALUETYPE_FLOAT32,
+        return create_command_value(dr.name, VALUETYPE_FLOAT32,
                                  _parse_float32(v, value_type))
     if value_type == VALUETYPE_FLOAT32_ARRAY:
-        return new_command_value(
+        return create_command_value(
             dr.name, VALUETYPE_FLOAT32_ARRAY,
             [_to_float32(float(item)) for item in _json_array(v, value_type)])
     if value_type == VALUETYPE_FLOAT64:
-        return new_command_value(dr.name, VALUETYPE_FLOAT64,
+        return create_command_value(dr.name, VALUETYPE_FLOAT64,
                                  _parse_float64(v, value_type))
     if value_type == VALUETYPE_FLOAT64_ARRAY:
-        return new_command_value(dr.name, VALUETYPE_FLOAT64_ARRAY,
+        return create_command_value(dr.name, VALUETYPE_FLOAT64_ARRAY,
                                  _json_array(v, value_type))
     if value_type == VALUETYPE_OBJECT:
-        return new_command_value(dr.name, VALUETYPE_OBJECT,
+        return create_command_value(dr.name, VALUETYPE_OBJECT,
                                  _normalize_to_object(value, v))
     if value_type == VALUETYPE_OBJECT_ARRAY:
-        return new_command_value(dr.name, VALUETYPE_OBJECT_ARRAY,
+        return create_command_value(dr.name, VALUETYPE_OBJECT_ARRAY,
                                  _normalize_to_object_array(value, v))
 
-    raise new_edgx_error(KIND_SERVER_ERROR, "unrecognized value type")
+    raise create_edgx_error(KIND_SERVER_ERROR, "unrecognized value type")
 
 
 def _conversion_error(v: str, value_type: str) -> EdgexError:
-    """Build the Go `strconv` conversion error message (KindServerError)."""
-    return new_edgx_error(
+    """Build the conversion error message (KindServerError)."""
+    return create_edgx_error(
         KIND_SERVER_ERROR,
         f"failed to convert set parameter {v} to ValueType {value_type}")
 
 
 def _json_array(v: str, value_type: str) -> Any:
-    """Decode a JSON array from the stringified value (mirrors the Go `json.Unmarshal`
-    used for the array value types).
-    """
+    """Decode a JSON array from the stringified value (used for the array value types)."""
     try:
         return json.loads(v)
     except (TypeError, ValueError) as exc:
@@ -806,8 +794,7 @@ def _parse_uint(v: str, bits: int, value_type: str) -> int:
 
 
 def _parse_uint_array(v: str, bits: int, value_type: str) -> List[int]:
-    """Parse a comma separated unsigned integer array (mirrors the Go split / ParseUint
-    loop used for the Uint*Array value types)."""
+    """Parse a comma separated unsigned integer array (used for the Uint*Array value types)."""
     result: List[int] = []
     for item in v.strip("[]").split(","):
         result.append(_parse_uint(item.strip(" "), bits, value_type))
@@ -828,7 +815,7 @@ def _parse_int(v: str, bits: int, value_type: str) -> int:
 
 def _parse_int_array(v: str, bits: int, value_type: str) -> List[int]:
     """Decode a signed integer array from JSON and enforce the element range (the Go
-    `json.Unmarshal` into `[]int8` / `[]int16` / ... rejects out-of-range numbers)."""
+`json.Unmarshal` into `[]int8` / `[]int16` /... rejects out-of-range numbers)."""
     arr = _json_array(v, value_type)
     result: List[int] = []
     for item in arr:
@@ -844,7 +831,7 @@ def _parse_float32(v: str, value_type: str) -> float:
     """Parse a float32 value.
 
     Mirrors the Go `strconv.ParseFloat(v, 32)` first and, on a syntax error, the base64 /
-    big-endian byte decoding fallback (`float32FromBytes`).  An out of range (infinite)
+big-endian byte decoding fallback (`float32FromBytes`). An out of range (infinite)
     result raises the Go `KindServerError("NumError")`; a decoded NaN is rejected.
     """
     try:
@@ -852,7 +839,7 @@ def _parse_float32(v: str, value_type: str) -> float:
     except ValueError:
         return _float_from_bytes(base64.b64decode(v), ">f", v, value_type, 32)
     if math.isinf(value):
-        raise new_edgx_error(KIND_SERVER_ERROR, "NumError")
+        raise create_edgx_error(KIND_SERVER_ERROR, "NumError")
     return _to_float32(value)
 
 
@@ -860,7 +847,7 @@ def _parse_float64(v: str, value_type: str) -> float:
     """Parse a float64 value.
 
     Mirrors the Go `strconv.ParseFloat(v, 64)` first and, on a syntax error, the base64 /
-    big-endian byte decoding fallback (`float64FromBytes`).  An out of range (infinite)
+big-endian byte decoding fallback (`float64FromBytes`). An out of range (infinite)
     result raises the Go `KindServerError("NumError")`; a decoded NaN is rejected.
     """
     try:
@@ -868,7 +855,7 @@ def _parse_float64(v: str, value_type: str) -> float:
     except ValueError:
         return _float_from_bytes(base64.b64decode(v), ">d", v, value_type, 64)
     if math.isinf(value):
-        raise new_edgx_error(KIND_SERVER_ERROR, "NumError")
+        raise create_edgx_error(KIND_SERVER_ERROR, "NumError")
     return value
 
 
@@ -881,7 +868,7 @@ def _float_from_bytes(data: bytes, fmt: str, v: str, value_type: str,
     except struct.error as exc:
         raise _conversion_error(v, value_type) from exc
     if math.isnan(value):
-        raise new_edgx_error(
+        raise create_edgx_error(
             KIND_SERVER_ERROR,
             f"fail to parse {v} to {value_type.lower()}, unexpected result {value}")
     return value
@@ -890,8 +877,8 @@ def _float_from_bytes(data: bytes, fmt: str, v: str, value_type: str,
 def _normalize_to_object(value: Any, v: str) -> Optional[Dict[str, Any]]:
     """Normalize the request value to a JSON object.
 
-    Mirrors `normalizeToObject(value any)` in command.go: a string is decoded as JSON and
-    a dict is used as-is; any other type is rejected.  Returns None for a `None` value.
+    : a string is decoded as JSON and
+a dict is used as-is; any other type is rejected. Returns None for a `None` value.
     """
     if value is None:
         return None
@@ -899,18 +886,18 @@ def _normalize_to_object(value: Any, v: str) -> Optional[Dict[str, Any]]:
         try:
             obj = json.loads(value)
         except (TypeError, ValueError) as exc:
-            raise new_edgx_error(
+            raise create_edgx_error(
                 KIND_SERVER_ERROR,
                 f"failed to convert set parameter {v} to ValueType {VALUETYPE_OBJECT}") \
                 from exc
         if not isinstance(obj, dict):
-            raise new_edgx_error(
+            raise create_edgx_error(
                 KIND_SERVER_ERROR,
                 f"failed to convert set parameter {v} to ValueType {VALUETYPE_OBJECT}")
         return obj
     if isinstance(value, dict):
         return value
-    raise new_edgx_error(
+    raise create_edgx_error(
         KIND_SERVER_ERROR,
         f"unsupported type for Object: {type(value)}")
 
@@ -919,7 +906,7 @@ def _normalize_to_object_array(value: Any,
                                v: str) -> Optional[List[Dict[str, Any]]]:
     """Normalize the request value to a JSON object array.
 
-    Mirrors `normalizeToObjectArray(value any)` in command.go: a string is decoded as
+    : a string is decoded as
     JSON, a list is used as-is (each element must be a dict); any other type is rejected.
     Returns None for a `None` value.
     """
@@ -929,7 +916,7 @@ def _normalize_to_object_array(value: Any,
         try:
             obj = json.loads(value)
         except (TypeError, ValueError) as exc:
-            raise new_edgx_error(
+            raise create_edgx_error(
                 KIND_SERVER_ERROR,
                 f"failed to convert set parameter {v} to ValueType "
                 f"{VALUETYPE_OBJECT_ARRAY}") from exc
@@ -937,17 +924,17 @@ def _normalize_to_object_array(value: Any,
     elif isinstance(value, list):
         arr = value
     else:
-        raise new_edgx_error(
+        raise create_edgx_error(
             KIND_SERVER_ERROR,
             f"unsupported type for ObjectArray: {type(value)}")
 
     if arr is None:
-        raise new_edgx_error(
+        raise create_edgx_error(
             KIND_SERVER_ERROR,
             f"failed to convert set parameter {v} to ValueType {VALUETYPE_OBJECT_ARRAY}")
     for elem in arr:
         if not isinstance(elem, dict):
-            raise new_edgx_error(
+            raise create_edgx_error(
                 KIND_SERVER_ERROR,
                 f"failed to convert set parameter {v} to ValueType "
                 f"{VALUETYPE_OBJECT_ARRAY}")

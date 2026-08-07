@@ -2,15 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The device discovery / profile scan REST controller - ported from
 `device-sdk-go/internal/controller/http/discovery.go`.
 
 `DiscoveryController` provides the handlers registered for the POST
 `/api/v3/discovery`, POST `/api/v3/profilescan`, DELETE `/api/v3/discovery`,
 DELETE `/api/v3/discovery/{requestId}` and DELETE
-`/api/v3/profilescan/device/{name}` routes.  The `discovery` handler checks the Device
+`/api/v3/profilescan/device/{name}` routes. The `discovery` handler checks the Device
 Service AdminState and the discovery configuration, then triggers the ProtocolDriver's
-`discover()` in a background thread and acknowledges with an Accepted response.  The
+`discover()` in a background thread and acknowledges with an Accepted response. The
 `profile_scan` handler validates the request against the DeviceService / caches and
 defers the actual scanning to a handler hook.
 
@@ -48,9 +47,9 @@ from ...common.utils import (
     KIND_STATUS_CONFLICT,
     EdgexError,
     current_time_millis,
-    new_edgx_error,
+    create_edgx_error,
 )
-from ._utils import (
+from._utils import (
     base_response,
     correlation_id_from_request,
     parse_request_body,
@@ -68,8 +67,8 @@ class DiscoveryController:
     def _service_admin_state_locked(self) -> bool:
         """Return True when the DeviceService AdminState is Locked.
 
-        Mirrors `container.DeviceServiceFrom(dic.Get).AdminState == models.Locked` in
-        discovery.go.  The `device_service` may not be wired yet, in which case the state
+        In
+The `device_service` may not be wired yet, in which case the state
         is treated as unlocked.
         """
         return self.device_service is not None and \
@@ -78,8 +77,8 @@ class DiscoveryController:
     def _discovery_enabled(self) -> bool:
         """Return True when device discovery is enabled in the configuration.
 
-        Mirrors `container.ConfigurationFrom(dic.Get).Device.Discovery.Enabled` in
-        discovery.go.  The Python configuration model is ported in a later phase, so the
+        In
+The Python configuration model is ported in a later phase, so the
         setting is read defensively and discovery is disabled when it is not set.
         """
         configuration = self.configuration
@@ -94,7 +93,7 @@ class DiscoveryController:
     def discovery(self, request: Request) -> Response:
         """Handle the POST `/api/v3/discovery` request.
 
-        Mirrors `(c *RestController) Discovery(e echo.Context)` in discovery.go: checks
+        : checks
         the DeviceService AdminState and the discovery configuration, triggers the
         ProtocolDriver's `discover()` in a background thread and acknowledges with an
         Accepted response carrying the correlation id as request id.
@@ -104,11 +103,11 @@ class DiscoveryController:
         correlation_id = correlation_id_from_request(request)
 
         if self._service_admin_state_locked():
-            err = new_edgx_error(KIND_SERVICE_LOCKED, "service locked")
+            err = create_edgx_error(KIND_SERVICE_LOCKED, "service locked")
             return send_edgx_error(request, err, API_DISCOVERY_ROUTE)
 
         if not self._discovery_enabled():
-            err = new_edgx_error(KIND_SERVICE_UNAVAILABLE, "device discovery disabled")
+            err = create_edgx_error(KIND_SERVICE_UNAVAILABLE, "device discovery disabled")
             return send_edgx_error(request, err, API_DISCOVERY_ROUTE)
 
         driver = self.driver
@@ -145,10 +144,10 @@ class DiscoveryController:
         """Handle the DELETE `/api/v3/discovery` and
         `/api/v3/discovery/{requestId}` requests.
 
-        Mirrors `(c *RestController) StopDeviceDiscovery(e echo.Context)` in
+        In
         discovery.go: collects the query parameters as the stop options and delegates to
         the `device_discovery_stop_handler` hook (the port of
-        `autodiscovery.StopDeviceDiscovery`).  When the hook is not wired yet an
+`autodiscovery.StopDeviceDiscovery`). When the hook is not wired yet an
         NotImplemented error is returned.
         """
         request_id = request.path_params.get(REQUEST_ID, "")
@@ -159,7 +158,7 @@ class DiscoveryController:
 
         handler = getattr(self, "device_discovery_stop_handler", None)
         if handler is None:
-            err = new_edgx_error(KIND_NOT_IMPLEMENTED,
+            err = create_edgx_error(KIND_NOT_IMPLEMENTED,
                                  "device discovery stop is not implemented")
             return send_edgx_error_with_request_id(
                 request, err, API_DISCOVERY_BY_ID_ROUTE, request_id)
@@ -179,17 +178,17 @@ class DiscoveryController:
     async def profile_scan(self, request: Request) -> Response:
         """Handle the POST `/api/v3/profilescan` request.
 
-        Mirrors `(c *RestController) ProfileScan(e echo.Context)` in discovery.go: checks
+        : checks
         the DeviceService AdminState, validates the request payload against the caches
         (device existence, profile duplication) and triggers the scanning through the
-        `profile_scan_handler` hook (the port of `application.ProfileScanWrapper`).  When
+`profile_scan_handler` hook (the port of `application.ProfileScanWrapper`). When
         the hook is not wired yet a NotImplemented error is returned.
 
         The handler is asynchronous because it reads the request body, which is a
         coroutine in Starlette.
         """
         if self._service_admin_state_locked():
-            err = new_edgx_error(KIND_SERVICE_LOCKED, "service locked")
+            err = create_edgx_error(KIND_SERVICE_LOCKED, "service locked")
             return send_edgx_error(request, err, API_PROFILE_SCAN_ROUTE)
 
         body = await request.body()
@@ -201,10 +200,10 @@ class DiscoveryController:
         # check requested device exists
         device_name = payload.get("deviceName", "")
         if device_name == "":
-            err = new_edgx_error(KIND_CONTRACT_INVALID, "device name is empty")
+            err = create_edgx_error(KIND_CONTRACT_INVALID, "device name is empty")
             return send_edgx_error(request, err, API_PROFILE_SCAN_ROUTE)
         if not Devices().for_name(device_name)[1]:
-            err = new_edgx_error(KIND_ENTITY_DOES_NOT_EXIST,
+            err = create_edgx_error(KIND_ENTITY_DOES_NOT_EXIST,
                                  f"device {device_name} not found")
             return send_edgx_error(request, err, API_PROFILE_SCAN_ROUTE)
 
@@ -212,7 +211,7 @@ class DiscoveryController:
         profile_name = payload.get("profileName", "")
         if profile_name != "":
             if Profiles().for_name(profile_name)[1]:
-                err = new_edgx_error(
+                err = create_edgx_error(
                     KIND_STATUS_CONFLICT,
                     f"profile name {profile_name} is duplicated")
                 return send_edgx_error(request, err, API_PROFILE_SCAN_ROUTE)
@@ -226,7 +225,7 @@ class DiscoveryController:
 
         handler = getattr(self, "profile_scan_handler", None)
         if handler is None:
-            err = new_edgx_error(KIND_NOT_IMPLEMENTED,
+            err = create_edgx_error(KIND_NOT_IMPLEMENTED,
                                  "Profile scan is not implemented")
             return send_edgx_error(request, err, API_PROFILE_SCAN_ROUTE)
 
@@ -265,7 +264,7 @@ class DiscoveryController:
     def stop_profile_scan(self, request: Request) -> Response:
         """Handle the DELETE `/api/v3/profilescan/device/{name}` request.
 
-        Mirrors `(c *RestController) StopProfileScan(e echo.Context)` in discovery.go:
+        :
         collects the query parameters as the stop options and delegates to the
         `profile_scan_stop_handler` hook (the port of `application.StopProfileScan`).
         When the hook is not wired yet an NotImplemented error is returned.
@@ -278,7 +277,7 @@ class DiscoveryController:
 
         handler = getattr(self, "profile_scan_stop_handler", None)
         if handler is None:
-            err = new_edgx_error(KIND_NOT_IMPLEMENTED,
+            err = create_edgx_error(KIND_NOT_IMPLEMENTED,
                                  "profile scan stop is not implemented")
             return send_edgx_error(request, err, API_PROFILE_SCAN_BY_DEVICE_NAME_ROUTE)
 

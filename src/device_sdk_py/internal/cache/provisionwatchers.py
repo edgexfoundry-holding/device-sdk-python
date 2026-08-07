@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The ProvisionWatcher cache - ported from `device-sdk-go/internal/cache/provisionwatcher.go`.
 
 `ProvisionWatcherCache` is a thread-safe in-memory store of the ProvisionWatchers used to
 automatically provision discovered Devices.
@@ -24,14 +23,14 @@ from .providers import (
     CacheError,
     CacheErrorKind,
     ProvisionWatcher,
-    new_cache_error,
+    create_cache_error,
 )
 
 
 class ProvisionWatcherCache:
     """A thread-safe cache of ProvisionWatchers keyed by watcher name.
 
-    Corresponds to `cache.ProvisionWatcherCache` in provisionwatcher.go.  All access is
+    All access is
     guarded by a reentrant lock (`threading.RLock`, the Python counterpart of
     `sync.RWMutex`); the read methods return clones of the stored ProvisionWatchers.
     """
@@ -45,7 +44,7 @@ class ProvisionWatcherCache:
     def for_name(self, name: str) -> Tuple[ProvisionWatcher, bool]:
         """Return a clone of the ProvisionWatcher with the given name and whether it exists.
 
-        Mirrors `ProvisionWatcherCache.ForName(name)`.  A clone is returned (never the
+        A clone is returned (never the
         stored instance) to avoid concurrent mutation of the cached ProvisionWatcher.
         """
         with self._mutex:
@@ -63,7 +62,7 @@ class ProvisionWatcherCache:
     def add(self, watcher: ProvisionWatcher) -> None:
         """Add a new ProvisionWatcher to the cache.
 
-        Mirrors `ProvisionWatcherCache.Add(watcher)`.  Raises `CacheError` with kind
+        Raises `CacheError` with kind
         `DUPLICATE_NAME` when a ProvisionWatcher with the same name already exists.
         """
         with self._mutex:
@@ -71,7 +70,7 @@ class ProvisionWatcherCache:
 
     def _add(self, watcher: ProvisionWatcher) -> None:
         if watcher.name in self._pw_map:
-            raise new_cache_error(
+            raise create_cache_error(
                 CacheErrorKind.DUPLICATE_NAME,
                 f"ProvisionWatcher {watcher.name} has already existed in cache")
         self._pw_map[watcher.name] = watcher
@@ -79,8 +78,8 @@ class ProvisionWatcherCache:
     def update(self, watcher: ProvisionWatcher) -> None:
         """Update the ProvisionWatcher in the cache.
 
-        Mirrors `ProvisionWatcherCache.Update(watcher)` which removes the existing entry
-        first and then adds the new one.  Raises `CacheError` with kind
+        Which removes the existing entry
+first and then adds the new one. Raises `CacheError` with kind
         `ENTITY_DOES_NOT_EXIST` when the ProvisionWatcher is not present.
         """
         with self._mutex:
@@ -90,7 +89,7 @@ class ProvisionWatcherCache:
     def remove_by_name(self, name: str) -> None:
         """Remove the ProvisionWatcher with the given name from the cache.
 
-        Mirrors `ProvisionWatcherCache.RemoveByName(name)`.  Raises `CacheError` with kind
+        Raises `CacheError` with kind
         `ENTITY_DOES_NOT_EXIST` when the ProvisionWatcher is not present.
         """
         with self._mutex:
@@ -98,7 +97,7 @@ class ProvisionWatcherCache:
 
     def _remove_by_name(self, name: str) -> None:
         if name not in self._pw_map:
-            raise new_cache_error(
+            raise create_cache_error(
                 CacheErrorKind.ENTITY_DOES_NOT_EXIST,
                 f"failed to find ProvisionWatcher {name} in cache")
         del self._pw_map[name]
@@ -106,29 +105,27 @@ class ProvisionWatcherCache:
     def update_admin_state(self, name: str, state: AdminState) -> None:
         """Update the admin state of the ProvisionWatcher with the given name.
 
-        Mirrors `ProvisionWatcherCache.UpdateAdminState(name, state)`.  Raises `CacheError`
         with kind `CONTRACT_INVALID` for an invalid admin state and `ENTITY_DOES_NOT_EXIST`
         when the ProvisionWatcher is not present.
         """
         if state != ADMIN_STATE_LOCKED and state != ADMIN_STATE_UNLOCKED:
-            raise new_cache_error(CacheErrorKind.CONTRACT_INVALID, "invalid AdminState")
+            raise create_cache_error(CacheErrorKind.CONTRACT_INVALID, "invalid AdminState")
         with self._mutex:
             watcher = self._pw_map.get(name)
             if watcher is None:
-                raise new_cache_error(
+                raise create_cache_error(
                     CacheErrorKind.ENTITY_DOES_NOT_EXIST,
                     f"failed to find ProvisionWatcher {name} in cache")
             watcher.admin_state = state
 
 
-#: The package-level singleton mirroring the Go `pwc *provisionWatcherCache` variable.
+#: The package-level singleton variable.
 _provision_watcher_cache: Optional[ProvisionWatcherCache] = None
 
 
-def new_provision_watcher_cache(watchers: List[ProvisionWatcher]) -> ProvisionWatcherCache:
+def create_provision_watcher_cache(watchers: List[ProvisionWatcher]) -> ProvisionWatcherCache:
     """Initialize and return the provision watcher cache singleton with the given watchers.
 
-    Python counterpart of `cache.newProvisionWatcherCache(pws)` in provisionwatcher.go.
     """
     global _provision_watcher_cache
     _provision_watcher_cache = ProvisionWatcherCache(watchers)
@@ -138,7 +135,7 @@ def new_provision_watcher_cache(watchers: List[ProvisionWatcher]) -> ProvisionWa
 def ProvisionWatchers() -> ProvisionWatcherCache:
     """Return the provision watcher cache singleton (mirrors `cache.ProvisionWatchers()`).
 
-    The singleton must have been initialized via `new_provision_watcher_cache()` before
+    The singleton must have been initialized via `create_provision_watcher_cache()` before
     calling this.
     """
     if _provision_watcher_cache is None:
@@ -146,5 +143,3 @@ def ProvisionWatchers() -> ProvisionWatcherCache:
     return _provision_watcher_cache
 
 
-# PascalCase aliases kept for parity with the Go exported identifiers.
-NewProvisionWatcherCache = new_provision_watcher_cache

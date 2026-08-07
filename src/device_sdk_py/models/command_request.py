@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The CommandRequest data model - ported from `device-sdk-go/pkg/models/commandrequest.go`.
 
 `CommandRequest` is the struct used to request a command from ProtocolDrivers. It carries
 the Device Resource name, the resource attributes, the data type of the resource and, as a
@@ -21,7 +20,6 @@ from .command_value import VALUETYPE_STRING
 class CommandRequest:
     """A request for a command sent to a ProtocolDriver.
 
-    Corresponds to `models.CommandRequest` in commandrequest.go.
 
     Attributes:
         resource_name: The name of the Device Resource for this command.
@@ -38,7 +36,7 @@ class CommandRequest:
 
     @property
     def type(self) -> str:
-        """Alias of `value_type` mirroring the Go field name `Type`."""
+        """Alias of `value_type`."""
         return self.value_type
 
     @type.setter

@@ -1,7 +1,6 @@
 # Copyright (C) 2026 YIQISOFT
 # SPDX-License-Identifier: Apache-2.0
 """
-Metadata System Events callback - ported from
 `device-sdk-go/internal/controller/messaging/callback.go` (`MetadataSystemEventsCallback`).
 
 Subscribes to system event topics and dispatches to the appropriate handler:
@@ -40,6 +39,10 @@ from device_sdk_py.internal.common.consts import (
     CORE_METADATA_SERVICE_KEY,
 )
 from device_sdk_py.internal.common.utils import EdgexError
+
+
+#: Maximum number of queued system events before the queue drops new messages.
+_MAX_SYSTEM_EVENTS_QUEUE = 256
 
 
 def _decode_system_event(envelope: "MessageEnvelope") -> Optional[Dict[str, Any]]:
@@ -196,7 +199,7 @@ def subscribe_system_events(
     client: MessageClient,
     base_topic_prefix: str,
     service_name: str,
-    base_service_name: Optional[str],  # service name without instance suffix
+base_service_name: Optional[str], # service name without instance suffix
     add_device: Callable,
     update_device: Callable,
     delete_device: Callable,
@@ -234,18 +237,21 @@ def subscribe_system_events(
 
     # Main system events topic: <basePrefix>/system-events/<serviceName>/#
     main_topic = f"{base_topic_prefix}/{SYSTEM_EVENTS_PUBLISH_TOPIC}/{service_name}/#"
-    topics.append(TopicMessageQueue(topic=main_topic, message_queue=__import__("queue").Queue()))
+    topics.append(TopicMessageQueue(topic=main_topic,
+                                 message_queue=__import__("queue").Queue(maxsize=_MAX_SYSTEM_EVENTS_QUEUE)))
     log.info("Subscribing to system events on topic: %s", main_topic)
 
     # Profile delete special topic: <basePrefix>/system-events/device-profile/delete/#
     profile_delete_topic = f"{base_topic_prefix}/{SYSTEM_EVENTS_PUBLISH_TOPIC}/{DEVICE_PROFILE_SYSTEM_EVENT_TYPE}/{SYSTEM_EVENT_ACTION_DELETE}/#"
-    topics.append(TopicMessageQueue(topic=profile_delete_topic, message_queue=__import__("queue").Queue()))
+    topics.append(TopicMessageQueue(topic=profile_delete_topic,
+                                 message_queue=__import__("queue").Queue(maxsize=_MAX_SYSTEM_EVENTS_QUEUE)))
     log.info("Subscribing to profile delete events on topic: %s", profile_delete_topic)
 
     # Instance name scenario: provision watcher topic uses base service name
     if base_service_name and base_service_name != service_name:
         pw_topic = f"{base_topic_prefix}/{SYSTEM_EVENTS_PUBLISH_TOPIC}/{PROVISION_WATCHER_SYSTEM_EVENT_TYPE}/{base_service_name}/#"
-        topics.append(TopicMessageQueue(topic=pw_topic, message_queue=__import__("queue").Queue()))
+        topics.append(TopicMessageQueue(topic=pw_topic,
+                                 message_queue=__import__("queue").Queue(maxsize=_MAX_SYSTEM_EVENTS_QUEUE)))
         log.info("Subscribing to provision watcher events on topic: %s", pw_topic)
 
     error_queue: "queue.Queue[str]" = __import__("queue").Queue()

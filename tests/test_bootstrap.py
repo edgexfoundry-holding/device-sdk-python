@@ -27,7 +27,7 @@ from device_sdk_py.internal.cache import (  # noqa: E402
     DeviceProfile,
     ProvisionWatcher,
 )
-from device_sdk_py.interfaces.service import DeviceServiceSDKExt  # noqa: E402
+from device_sdk_py.interfaces.service import DeviceServiceSDK  # noqa: E402
 from device_sdk_py.internal.common.utils import EdgexErrorKind  # noqa: E402
 from device_sdk_py.service.bootstrap import bootstrap  # noqa: E402
 
@@ -46,7 +46,7 @@ class TestBootstrap(unittest.TestCase):
         ds = _make_service()
         self.assertEqual(ds.name(), "device-simple")
         self.assertEqual(ds.version(), "0.0.0")
-        self.assertIsInstance(ds, DeviceServiceSDKExt)
+        self.assertIsInstance(ds, DeviceServiceSDK)
 
 
 class TestDeviceCRUD(unittest.TestCase):

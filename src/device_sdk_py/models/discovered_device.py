@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The DiscoveredDevice data model - ported from `device-sdk-go/pkg/models/discovereddevice.go`.
 
 `DiscoveredDevice` defines the required information for a device found during protocol
 specific device discovery.
@@ -20,7 +19,7 @@ ProtocolProperties = Dict[str, Any]
 class DiscoveredDevice:
     """A device discovered by a ProtocolDriver.
 
-    Corresponds to `models.DiscoveredDevice` in discovereddevice.go. The Python SDK's
+    The Python SDK's
     `ProtocolProperties` type is the `dict[str, Any]` alias reused from
     `app_functions_sdk_py.contracts.dtos.protocolproperties`.
 

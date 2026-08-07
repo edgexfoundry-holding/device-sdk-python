@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The DeviceProfile cache - ported from `device-sdk-go/internal/cache/profiles.go`.
 
 `DeviceProfileCache` is a thread-safe in-memory store of the DeviceProfiles managed by the
 Device Service, together with two derived lookup maps (DeviceResource by name and
@@ -26,14 +25,14 @@ from .providers import (
     DeviceProfile,
     DeviceResource,
     ResourceOperation,
-    new_cache_error,
+    create_cache_error,
 )
 
 
 class DeviceProfileCache:
     """A thread-safe cache of DeviceProfiles keyed by Profile name.
 
-    Corresponds to `cache.ProfileCache` in profiles.go.  All access is guarded by a
+    All access is guarded by a
     reentrant lock (`threading.RLock`, the Python counterpart of `sync.RWMutex`); the read
     methods return clones of the stored Profiles.
     """
@@ -69,7 +68,7 @@ class DeviceProfileCache:
     def for_name(self, name: str) -> Tuple[DeviceProfile, bool]:
         """Return a clone of the Profile with the given name and whether it exists.
 
-        Mirrors `ProfileCache.ForName(name)`.  A clone is returned (never the stored
+        A clone is returned (never the stored
         instance) to avoid concurrent mutation of the cached Profile.
         """
         with self._mutex:
@@ -86,7 +85,7 @@ class DeviceProfileCache:
     def add(self, profile: DeviceProfile) -> None:
         """Add a new Profile to the cache.
 
-        Mirrors `ProfileCache.Add(profile)`.  Raises `CacheError` with kind
+        Raises `CacheError` with kind
         `DUPLICATE_NAME` when a Profile with the same name already exists.
         """
         with self._mutex:
@@ -95,7 +94,7 @@ class DeviceProfileCache:
     def check_and_add(self, profile: DeviceProfile) -> None:
         """Add the Profile to the cache unless it already exists (no-op then).
 
-        Mirrors `ProfileCache.CheckAndAdd(profile)` which returns without error when the
+        Which returns without error when the
         Profile is already present.
         """
         with self._mutex:
@@ -104,7 +103,7 @@ class DeviceProfileCache:
 
     def _add(self, profile: DeviceProfile) -> None:
         if profile.name in self._device_profile_map:
-            raise new_cache_error(
+            raise create_cache_error(
                 CacheErrorKind.DUPLICATE_NAME,
                 f"Profile {profile.name} has already existed in cache")
         self._device_profile_map[profile.name] = profile
@@ -116,8 +115,8 @@ class DeviceProfileCache:
     def update(self, profile: DeviceProfile) -> None:
         """Update the Profile in the cache.
 
-        Mirrors `ProfileCache.Update(profile)` which removes the existing entry first and
-        then adds the new one.  Raises `CacheError` with kind `ENTITY_DOES_NOT_EXIST`
+        Which removes the existing entry first and
+then adds the new one. Raises `CacheError` with kind `ENTITY_DOES_NOT_EXIST`
         when the Profile is not present.
         """
         with self._mutex:
@@ -127,7 +126,7 @@ class DeviceProfileCache:
     def remove_by_name(self, name: str) -> None:
         """Remove the Profile with the given name from the cache.
 
-        Mirrors `ProfileCache.RemoveByName(name)`.  Raises `CacheError` with kind
+        Raises `CacheError` with kind
         `ENTITY_DOES_NOT_EXIST` when the Profile is not present.
         """
         with self._mutex:
@@ -135,7 +134,7 @@ class DeviceProfileCache:
 
     def _remove_by_name(self, name: str) -> None:
         if name not in self._device_profile_map:
-            raise new_cache_error(
+            raise create_cache_error(
                 CacheErrorKind.ENTITY_DOES_NOT_EXIST,
                 f"failed to find Profile {name} in cache")
         del self._device_profile_map[name]
@@ -146,7 +145,6 @@ class DeviceProfileCache:
                         resource_name: str) -> Tuple[DeviceResource, bool]:
         """Return the DeviceResource with the given resource name in the Profile.
 
-        Mirrors `ProfileCache.DeviceResource(profileName, resourceName)`.
         """
         with self._mutex:
             resources = self._device_resource_map.get(profile_name)
@@ -161,7 +159,7 @@ class DeviceProfileCache:
             self, profile_name: str, regex: re.Pattern) -> Tuple[List[DeviceResource], bool]:
         """Return the DeviceResources matching the given regex pattern in the Profile.
 
-        Mirrors `ProfileCache.DeviceResourcesByRegex(profileName, regex)`.  A resource
+        A resource
         matches when its name is either equal to the regex pattern string or fully matched
         by the pattern.
         """
@@ -185,7 +183,6 @@ class DeviceProfileCache:
                        command_name: str) -> Tuple[DeviceCommand, bool]:
         """Return the DeviceCommand with the given command name in the Profile.
 
-        Mirrors `ProfileCache.DeviceCommand(profileName, commandName)`.
         """
         with self._mutex:
             commands = self._device_command_map.get(profile_name)
@@ -199,7 +196,7 @@ class DeviceProfileCache:
     def resource_operation(self, profile_name: str, resource_name: str) -> ResourceOperation:
         """Return the first ResourceOperation whose DeviceResource matches the given name.
 
-        Mirrors `ProfileCache.ResourceOperation(profileName, deviceResource)`.  Raises
+        Raises
         `CacheError` with kind `ENTITY_DOES_NOT_EXIST` when the Profile is missing or no
         ResourceOperation matches.
         """
@@ -209,26 +206,25 @@ class DeviceProfileCache:
                 for resource_operation in device_command.resource_operations:
                     if resource_operation.device_resource == resource_name:
                         return resource_operation
-            raise new_cache_error(
+            raise create_cache_error(
                 CacheErrorKind.ENTITY_DOES_NOT_EXIST,
                 f"failed to find ResourceOpertaion with DeviceResource {resource_name} "
                 f"in Profile {profile_name}")
 
     def _verify_profile_exists(self, profile_name: str) -> None:
         if profile_name not in self._device_profile_map:
-            raise new_cache_error(
+            raise create_cache_error(
                 CacheErrorKind.ENTITY_DOES_NOT_EXIST,
                 f"failed to find Profile {profile_name} in cache")
 
 
-#: The package-level singleton mirroring the Go `pc *profileCache` variable.
+#: The package-level singleton variable.
 _profile_cache: Optional[DeviceProfileCache] = None
 
 
-def new_profile_cache(profiles: List[DeviceProfile]) -> DeviceProfileCache:
+def create_profile_cache(profiles: List[DeviceProfile]) -> DeviceProfileCache:
     """Initialize and return the profile cache singleton with the given Profiles.
 
-    Python counterpart of `cache.newProfileCache(profiles)` in profiles.go.
     """
     global _profile_cache
     _profile_cache = DeviceProfileCache(profiles)
@@ -238,12 +234,10 @@ def new_profile_cache(profiles: List[DeviceProfile]) -> DeviceProfileCache:
 def Profiles() -> DeviceProfileCache:
     """Return the profile cache singleton (mirrors `cache.Profiles()`).
 
-    The singleton must have been initialized via `new_profile_cache()` before calling this.
+    The singleton must have been initialized via `create_profile_cache()` before calling this.
     """
     if _profile_cache is None:
         raise RuntimeError("profile cache has not been initialized")
     return _profile_cache
 
 
-# PascalCase aliases kept for parity with the Go exported identifiers.
-NewProfileCache = new_profile_cache

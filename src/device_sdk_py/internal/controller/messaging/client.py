@@ -5,7 +5,7 @@ EdgeX Device SDK messaging abstraction - adapted from
 `app-functions-sdk-python/src/app_functions_sdk_py/messaging/`.
 
 Provides `MessageClient` interface and MQTT implementation for publishing/subscribing
-to the EdgeX message bus.  The envelope format follows EdgeX v4 conventions:
+to the EdgeX message bus. The envelope format follows EdgeX v4 conventions:
 ContentType (JSON/CBOR), Correlation-Id, Request-Id; Checksum removed.
 """
 
@@ -83,8 +83,8 @@ class MessageBusConfig:
     optional: Dict[str, str] = field(default_factory=dict)
     # v4 additions
     base_topic_prefix: str = "edgex"
-    publish_topic_prefix: str = "events"     # "events" -> edgex/events/device/...
-    subscribe_topics: List[str] = field(default_factory=list)  # for App Services
+publish_topic_prefix: str = "events" # "events" -> edgex/events/device/...
+subscribe_topics: List[str] = field(default_factory=list) # for App Services
 
 
 class TlsConfigurationOptions:
@@ -160,7 +160,7 @@ def _on_connect(
     userdata: Any,
     flags: dict,
     rc: int,
-    properties  # pylint: disable=unused-argument
+properties # pylint: disable=unused-argument
 ) -> None:
     """Re-register message callbacks after (re)connection."""
     for topic, callback in userdata.items():
@@ -180,7 +180,10 @@ def _new_message_handler(message_queue: queue.Queue, error_queue: queue.Queue):
             error_queue.put(f"Failed to decode message into MessageEnvelope: {ex}")
             return
         env.received_topic = message.topic
-        message_queue.put(env)
+        try:
+            message_queue.put_nowait(env)
+        except queue.Full:
+            error_queue.put("Command queue is full; dropping message")
     return on_message
 
 
@@ -357,14 +360,14 @@ class MqttMessageClient(MessageClient):
             self._client.loop_stop()
 
 
-def new_message_client(message_bus_config: MessageBusConfig) -> MessageClient:
+def create_message_client(message_bus_config: MessageBusConfig) -> MessageClient:
     """Factory for message client based on config type."""
     if message_bus_config.message_bus_type.lower() == "mqtt":
         return MqttMessageClient(message_bus_config)
     raise ValueError(f"Unsupported message bus type: {message_bus_config.message_bus_type}")
 
 
-def new_message_envelope(
+def create_message_envelope(
     payload: Any,
     content_type: str = CONTENT_TYPE_JSON,
     correlation_id: Optional[str] = None,

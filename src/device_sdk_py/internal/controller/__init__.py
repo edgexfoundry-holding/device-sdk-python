@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The internal controllers of the EdgeX Device Service SDK - ported from
 `device-sdk-go/internal/controller`.
 
 Sub-packages:

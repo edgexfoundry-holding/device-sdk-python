@@ -1,7 +1,6 @@
 # Copyright (C) 2026 YIQISOFT
 # SPDX-License-Identifier: Apache-2.0
 """
-EdgeX event publishing utilities - ported from
 `device-sdk-go/internal/common/utils.go` (`SendEvent`).
 
 Builds the EdgeX v4 publish topic, chooses JSON/CBOR encoding, wraps the
@@ -39,7 +38,7 @@ __all__ = [
 ]
 
 # Default max event size (bytes) - mirrors Go constant
-DEFAULT_MAX_EVENT_SIZE = 0  # 0 = unlimited
+DEFAULT_MAX_EVENT_SIZE = 0 # 0 = unlimited
 
 # Topic path segments (mirrors go-mod-core-contracts/common)
 EVENTS_PUBLISH_TOPIC = "events"
@@ -66,7 +65,7 @@ def build_event_publish_topic(
     Build the EdgeX v4 event publish topic:
     `<baseTopicPrefix>/events/device/<serviceName>/<profileName>/<deviceName>/<sourceName>`
 
-    Mirrors Go `common.NewPathBuilder()...BuildPath()` with name field escaping.
+    With name field escaping.
     """
     # Simple path join; Go version does RFC3986 escaping for name fields.
     # For now we assume names are already valid topic segments (alphanumeric, dash, underscore).
@@ -85,8 +84,8 @@ def build_event_publish_topic(
 def build_system_event_publish_topic(
     base_topic_prefix: str,
     service_name: str,
-    event_type: str,      # device, device-profile, provision-watcher, device-service
-    action: str,          # add, update, delete, progress
+event_type: str, # device, device-profile, provision-watcher, device-service
+action: str, # add, update, delete, progress
 ) -> str:
     """
     Build system event publish topic:
@@ -184,7 +183,7 @@ def publish_event(
     """
     Publish an Event to the EdgeX message bus.
 
-    Mirrors Go `SendEvent(event, correlationID, dic)`:
+    :
     - builds topic `<baseTopicPrefix>/events/device/<svc>/<profile>/<device>/<source>`
     - encodes AddEventRequest (CBOR if binary reading, else JSON)
     - wraps in MessageEnvelope with correlation_id
@@ -223,8 +222,8 @@ def publish_event(
 def publish_system_event(
     client: MessageClient,
     service_name: str,
-    event_type: str,          # device, device-profile, provision-watcher, device-service
-    action: str,              # add, update, delete, progress
+event_type: str, # device, device-profile, provision-watcher, device-service
+action: str, # add, update, delete, progress
     details: Any,
     correlation_id: Optional[str] = None,
     base_topic_prefix: str = "edgex",
@@ -246,7 +245,7 @@ def publish_system_event(
     sys_event = {
         "apiVersion": "v3",
         "eventId": str(uuid.uuid4()),
-        "origin": int(1e9 * __import__("time").time()),  # nanoseconds
+"origin": int(1e9 * __import__("time").time()), # nanoseconds
         "sourceName": service_name,
         "owner": service_name,
         "type": event_type,

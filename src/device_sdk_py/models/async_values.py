@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The AsyncValues data model - ported from `device-sdk-go/pkg/models/asyncvalues.go`.
 
 `AsyncValues` is the struct used by ProtocolDrivers to send Device readings asynchronously
 to the SDK (which forwards them to Core Data).
@@ -20,7 +19,6 @@ from .command_value import CommandValue
 class AsyncValues:
     """An asynchronous batch of readings produced by a ProtocolDriver.
 
-    Corresponds to `models.AsyncValues` in asyncvalues.go.
 
     Attributes:
         device_name: The name of the Device that produced the readings.

@@ -6,12 +6,12 @@ messaging/validation.go`` (``SubscribeDeviceValidation``).
 
 When Core Metadata adds or updates a Device it publishes an ``AddDeviceRequest`` envelope on
 the topic ``<baseTopicPrefix>/<serviceName>/validate/device`` and waits for a response on
-``<baseTopicPrefix>/response/<serviceName>/<requestId>``.  Without a subscriber the
+``<baseTopicPrefix>/response/<serviceName>/<requestId>``. Without a subscriber the
 request times out and Core Metadata returns HTTP 503 "request timeout" for the device
 create/update call.
 
 This module subscribes to that topic, invokes the ProtocolDriver's ``validate_device`` and
-publishes the validation result back - mirroring the Go ``validation.go`` loop.  The wire
+publishes the validation result back - validation.go`` loop. The wire
 format is a ``MessageEnvelope`` JSON object with an inline JSON ``payload`` (the
 ``AddDeviceRequest``) and the response envelope carries an empty payload and ``errorCode=0``.
 
@@ -138,7 +138,7 @@ class DeviceValidationHandler:
                 raise ValueError("payload is not an AddDeviceRequest")
             device = _build_device(device_dto)
             self.driver.validate_device(device)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc: # noqa: BLE001
             self._logger.error("Device validation failed: %s", exc)
             self._publish_response(request_id, correlation_id, error_code=str(exc))
             return
@@ -148,8 +148,10 @@ class DeviceValidationHandler:
 
     def _publish_response(self, request_id: str, correlation_id: str,
                           error_code: str = "") -> None:
-        """Publish a validation result envelope (mirrors Go ``NewMessageEnvelopeForResponse`` /
-        ``NewMessageEnvelopeWithError``)."""
+        """Publish a validation result envelope.
+
+        Mirrors ``NewMessageEnvelopeWithError``.
+        """
         if self._client is None or not request_id:
             return
         envelope = {
@@ -164,7 +166,7 @@ class DeviceValidationHandler:
         topic = self._response_topic(request_id)
         try:
             self._client.publish(topic, json.dumps(envelope), qos=0)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc: # noqa: BLE001
             self._logger.error("failed to publish device validation response to %s: %s",
                                topic, exc)
 

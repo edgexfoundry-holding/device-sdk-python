@@ -2,13 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The shared HTTP helpers of the REST controllers - ported from
 `device-sdk-go/internal/controller/http/restrouter.go`.
 
 The Go `RestController` assembles the response packet (setting the correlation id and
 content type headers, marshaling the payload and writing the status code) in
 `sendResponse` / `sendEventResponse` and reports errors through
-`sendEdgexError` / `sendEdgexErrorWithRequestId`.  The Python port provides the same
+`sendEdgexError` / `sendEdgexErrorWithRequestId`. The Python port provides the same
 helpers as standalone functions operating on a `fastapi.Request` and returning a
 `starlette.Response`, so that they can be shared by the command / discovery controllers
 without depending on a framework base class.
@@ -43,7 +42,7 @@ from ...common.consts import (
     CORRELATION_HEADER,
     SDK_RESERVED_PREFIX,
 )
-from ...common.utils import EdgexError, new_edgx_error, KIND_CONTRACT_INVALID
+from ...common.utils import EdgexError, create_edgx_error, KIND_CONTRACT_INVALID
 
 __all__ = [
     "correlation_id_from_request",
@@ -64,7 +63,7 @@ def correlation_id_from_request(request: Request) -> str:
     """Return the correlation id carried by the request, or an empty string when the
     header is not present.
 
-    Mirrors `utils.FromContext(ctx, common.CorrelationHeader)` used by the Go
+    Used by the Go
     controllers.
     """
     return request.headers.get(CORRELATION_HEADER, "")
@@ -74,9 +73,9 @@ def filter_query_params(raw_query: str) -> Tuple[str, Dict[str, str]]:
     """Separate the SDK reserved query parameters (prefixed with `ds-`) from the ones
     passed through to the ProtocolDriver.
 
-    Mirrors `filterQueryParams(rawQuery string)` in command.go.  Returns the
+    Returns the
     re-encoded query string without the reserved parameters and the map of reserved
-    parameters.  Go's `url.ParseQuery` never reports a parse error in practice, so the
+parameters. Go's `url.ParseQuery` never reports a parse error in practice, so the
     Python port has no error path.
     """
     query_params = urllib.parse.parse_qs(raw_query, keep_blank_values=True)
@@ -91,7 +90,7 @@ def filter_query_params(raw_query: str) -> Tuple[str, Dict[str, str]]:
 def parse_request_body(body: bytes) -> Dict[str, Any]:
     """Parse the request body into a map of resource name to value.
 
-    Mirrors `parseRequestBody(r *http.Request)` in command.go.  An empty body produces
+    An empty body produces
     an empty map; a body that is not a valid JSON object raises an `EdgexError` of kind
     ContractInvalid ("failed to parse request body").
     """
@@ -100,10 +99,10 @@ def parse_request_body(body: bytes) -> Dict[str, Any]:
     try:
         param_map = json.loads(body)
     except (TypeError, ValueError) as exc:
-        raise new_edgx_error(KIND_CONTRACT_INVALID,
+        raise create_edgx_error(KIND_CONTRACT_INVALID,
                              "failed to parse request body") from exc
     if not isinstance(param_map, dict):
-        raise new_edgx_error(KIND_CONTRACT_INVALID, "failed to parse request body")
+        raise create_edgx_error(KIND_CONTRACT_INVALID, "failed to parse request body")
     return param_map
 
 
@@ -121,7 +120,7 @@ def _omit_empty(payload: Dict[str, Any]) -> Dict[str, Any]:
 def base_response(request_id: str, message: str, status_code: HTTPStatus) -> Dict[str, Any]:
     """Assemble the JSON packet of a `commonDTO.BaseResponse`.
 
-    Mirrors `commonDTO.NewBaseResponse(requestId, message, statusCode)`.  The
+    The
     `requestId` and `message` fields are omitted when empty, like the Go `omitempty`
     JSON tags.
     """
@@ -188,7 +187,7 @@ def event_to_dict(event: Event) -> Dict[str, Any]:
 def event_response(event: Optional[Event], status_code: HTTPStatus) -> Dict[str, Any]:
     """Assemble the JSON packet of a `responses.EventResponse`.
 
-    Mirrors `responses.NewEventResponse("", "", statusCode, *event)`.  The event is
+    The event is
     omitted from the packet when None (no readings were produced by the driver).
     """
     payload = _omit_empty({
@@ -204,7 +203,7 @@ def send_response(request: Request, response: Dict[str, Any], api: str,
                   status_code: HTTPStatus) -> Response:
     """Put together the response packet for the v3 API.
 
-    Mirrors `(c *RestController) sendResponse(...)` in restrouter.go: echoes back the
+    : echoes back the
     correlation id, sets the content type and marshals the payload to JSON.
     """
     correlation_id = correlation_id_from_request(request)
@@ -221,7 +220,6 @@ def send_event_response(request: Request, event: Optional[Event],
                         status_code: HTTPStatus) -> Response:
     """Put together the EventResponse packet for the v3 API.
 
-    Mirrors `(c *RestController) sendEventResponse(...)` in restrouter.go.
     Uses CBOR encoding when the event contains binary readings.
     """
     # Check if event has binary readings (triggers CBOR encoding per ADR 0011)
@@ -252,7 +250,6 @@ def send_event_response(request: Request, event: Optional[Event],
 def send_edgx_error(request: Request, err: EdgexError, api: str) -> Response:
     """Report an `EdgexError` as the v3 error response packet.
 
-    Mirrors `(c *RestController) sendEdgexError(...)` in restrouter.go.
     """
     return send_edgx_error_with_request_id(request, err, api, "")
 
@@ -261,7 +258,6 @@ def send_edgx_error_with_request_id(request: Request, err: EdgexError, api: str,
                                     request_id: str) -> Response:
     """Report an `EdgexError`, including the request id, as the v3 error response packet.
 
-    Mirrors `(c *RestController) sendEdgexErrorWithRequestId(...)` in restrouter.go.
     """
     correlation_id = correlation_id_from_request(request)
     _log_error(request, err, correlation_id)
@@ -271,7 +267,7 @@ def send_edgx_error_with_request_id(request: Request, err: EdgexError, api: str,
 
 def _log_error(request: Request, err: EdgexError, correlation_id: str) -> None:
     """Log the error and its debug messages with the correlation id, mirroring the
-    `lc.Error` / `lc.Debug` calls in sendEdgexErrorWithRequestId.  A logger attached to
+`lc.Error` / `lc.Debug` calls in sendEdgexErrorWithRequestId. A logger attached to
     the request state is used when present, otherwise the module logger."""
     logger = request.state.logger if hasattr(request.state, "logger") \
         else logging.getLogger(__name__)

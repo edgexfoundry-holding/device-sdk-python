@@ -2,11 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-The AutoEvent executor - ported from `device-sdk-go/internal/autoevent/executor.go`.
 
 `AutoEventExecutor` periodically (at the interval defined by an AutoEvent) reads the
 CommandValues of a Device source through a user-supplied `read_handler` and sends them as
-`AsyncValues` through a `send_handler`.  When `on_change` is set, an execution is skipped
+`AsyncValues` through a `send_handler`. When `on_change` is set, an execution is skipped
 unless at least one reading changed; the `on_change_threshold` controls how much a numeric
 value must change to be considered different.
 
@@ -66,7 +65,7 @@ _logger = logging.getLogger(__name__)
 class AutoEventError(Exception):
     """Raised when an AutoEvent cannot be processed (e.g. an invalid interval).
 
-    Python counterpart of the `errors.EdgeX` returned by `NewExecutor` in executor.go.
+    EdgeX` returned by `NewExecutor` in executor.go.
     """
 
 
@@ -74,7 +73,7 @@ def parse_duration(interval: str) -> float:
     """Parse a Go duration string (e.g. ``"300ms"``, ``"1.5h"``, ``"2h45m"``, ``"0"``)
     and return the duration in seconds.
 
-    Mirrors `time.ParseDuration` in executor.go.  Raises `AutoEventError` for invalid
+    Raises `AutoEventError` for invalid
     strings.
     """
     original = interval
@@ -128,7 +127,7 @@ def _checksum(binary_value: bytes) -> int:
 
 def _to_float(value: Any) -> float:
     """Convert a stored reading value to float, returning 0.0 when it cannot be converted
-    (mirrors the Go `cast.ToFloat64` behaviour for unparseable values)."""
+( behaviour for unparseable values)."""
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -138,7 +137,7 @@ def _to_float(value: Any) -> float:
 class AutoEventExecutor:
     """Periodically reads and sends the readings of one AutoEvent source for a Device.
 
-    Corresponds to `Executor` in executor.go.  The executor runs in its own daemon thread
+    The executor runs in its own daemon thread
     started by `start()` and stopped by `stop()`; the read / send side effects are delegated
     to the `read_handler` / `send_handler` callables supplied at construction time.
     """
@@ -183,7 +182,7 @@ class AutoEventExecutor:
     def run(self) -> None:
         """The executor loop: read the source at a fixed rate until `stop()` is called.
 
-        Mirrors `Executor.Run` in executor.go: the deadline is advanced by the interval
+        : the deadline is advanced by the interval
         after each execution so readings happen on a fixed schedule.
         """
         deadline = time.monotonic() + self._interval_seconds
@@ -233,7 +232,7 @@ class AutoEventExecutor:
         """Compare the current readings with the previous ones, updating the stored
         readings and the list of changed readings.
 
-        Mirrors `Executor.compareReadings` in executor.go.  Returns True when the readings
+        Returns True when the readings
         are unchanged (so the caller can skip sending them).
         """
         with self._mutex:
@@ -278,12 +277,12 @@ class AutoEventExecutor:
                 self._last_readings[cv.device_resource_name] = cv.value
 
 
-def new_executor(device_name: str, auto_event: AutoEvent,
+def create_executor(device_name: str, auto_event: AutoEvent,
                  read_handler: Callable[[str, str], Optional[List[CommandValue]]],
                  send_handler: Optional[Callable[[AsyncValues], None]] = None,
                  send_changed_readings_only: bool = False) -> AutoEventExecutor:
     """Create an `AutoEventExecutor` for an AutoEvent (mirrors `NewExecutor` in
-    executor.go).  Raises `AutoEventError` when the AutoEvent interval cannot be parsed.
+executor.go). Raises `AutoEventError` when the AutoEvent interval cannot be parsed.
     """
     return AutoEventExecutor(
         device_name=device_name,
@@ -293,5 +292,3 @@ def new_executor(device_name: str, auto_event: AutoEvent,
         send_changed_readings_only=send_changed_readings_only)
 
 
-# PascalCase aliases kept for parity with the Go exported identifiers.
-NewExecutor = new_executor
