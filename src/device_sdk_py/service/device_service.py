@@ -6,9 +6,11 @@ The DeviceService implementation.
 
 `DeviceService` implements `interfaces.DeviceServiceSDK`. The managed Devices /
 DeviceProfiles / ProvisionWatchers are held by the internal cache singletons
-(`cache.Devices()`, `cache.Profiles()`, `cache.ProvisionWatchers()`); the Core Metadata
-network calls are lightweight placeholders - they only log a TODO message until the
-app-functions-sdk-python metadata clients are ported.
+(`cache.Devices()`, `cache.Profiles()`, `cache.ProvisionWatchers()`). All managed-entity
+CRUD operations use a cache-first + rollback pattern: the local cache is updated first,
+then the write is propagated to Core Metadata via a bounded thread pool. On a metadata
+failure the cache change is rolled back and the error is propagated as an `EdgexError`
+(KindServerError).
 
 The `cache` module needs to be initialized (`create_device_cache` / `create_profile_cache` /
 `create_provision_watcher_cache`) before this service is used.
@@ -100,8 +102,9 @@ class DeviceService(DeviceServiceSDK):
     """The DeviceService implementation of `DeviceServiceSDK`.
 
     The managed entity CRUD methods cover Devices, DeviceProfiles, ProvisionWatchers and
-    AutoEvents; the Core Metadata side of each operation is a placeholder until the
-    app-functions-sdk-python metadata clients are ported.
+    AutoEvents. Each operation uses cache-first + rollback: the local cache is updated
+    first, then the write is propagated to Core Metadata. On metadata failure the cache
+    change is rolled back and the error is propagated.
     """
 
     def __init__(self, service_key: str, service_version: str, driver: Any,
@@ -172,11 +175,10 @@ class DeviceService(DeviceServiceSDK):
     def add_device(self, device: "Device") -> str:
         """Add a new Device to the Device Service and Core Metadata.
 
-
-        A duplicate name is rejected against the cache,
-        `device.service_name` is set to this service's name and the Device is added to
-        Core Metadata (a placeholder for now); the returned id is the one assigned by Core
-        Metadata (a generated UUID in the placeholder).
+        A duplicate name is rejected against the cache. `device.service_name` is set to
+        this service's name. The Device is validated (unless bypassed) and cached first,
+        then written to Core Metadata. On metadata failure the cache entry is rolled back
+        and the error is propagated. The returned id is the one assigned by Core Metadata.
 
         Raises:
             EdgexError: KindDuplicateName when a Device with the same name already exists.
@@ -195,6 +197,9 @@ class DeviceService(DeviceServiceSDK):
         """Add a new Device to the Device Service and Core Metadata with
         bypassValidation=true to skip device validation.
 
+        The Device is cached first, then written to Core Metadata with validation
+        bypassed. On metadata failure the cache entry is rolled back and the error is
+        propagated.
         """
         _, exists = Devices().for_name(device.name)
         if exists:
@@ -228,10 +233,11 @@ class DeviceService(DeviceServiceSDK):
         return device
 
     def update_device(self, device: "Device") -> None:
-        """Update the Device in Core Metadata.
+        """Update the Device in Core Metadata and the local cache.
 
-        Forwards to a patch of the Device derived from the updated model; the cache copy
-        is not updated here.
+        The cache is updated first (with validation), then Core Metadata is patched.
+        On metadata failure the cache is restored from a snapshot and the error is
+        propagated.
 
         Raises:
             EdgexError: When the Device is not in the cache.
@@ -252,9 +258,12 @@ class DeviceService(DeviceServiceSDK):
         self._patch_device_in_metadata(device.name, updates, bypass_validation=False)
 
     def update_device_without_validation(self, device: "Device") -> None:
-        """Update the Device in Core Metadata with bypassValidation=true to skip device
-        validation.
+        """Update the Device in Core Metadata and the local cache with
+        bypassValidation=true to skip device validation.
 
+        The cache is updated first (validation skipped), then Core Metadata is patched.
+        On metadata failure the cache is restored from a snapshot and the error is
+        propagated.
         """
         self.get_device_by_name(device.name)
         updates = {
@@ -272,11 +281,12 @@ class DeviceService(DeviceServiceSDK):
         self._patch_device_in_metadata(device.name, updates, bypass_validation=True)
 
     def patch_device(self, update_device: "UpdateDevice") -> None:
-        """Patch the specified device properties in Core Metadata. Device name is required
-        to be provided in the UpdateDevice. All properties of UpdateDevice are optional;
-        anything that is None will not modify the Device. Arrays and Maps are applied as
-        an overwrite operation (send the whole new value).
+        """Patch the specified device properties in Core Metadata and the local cache.
 
+        Device name is required in the UpdateDevice. All properties are optional; None
+        values are ignored. The cache is updated first (with validation), then Core
+        Metadata is patched. On metadata failure the cache is restored from a snapshot
+        and the error is propagated.
 
         Raises:
             EdgexError: KindContractInvalid when the Device name is missing;
@@ -285,9 +295,12 @@ class DeviceService(DeviceServiceSDK):
         self._patch_device_impl(update_device, bypass_validation=False)
 
     def patch_device_without_validation(self, update_device: "UpdateDevice") -> None:
-        """Patch the specified device properties in Core Metadata with
-        bypassValidation=true to skip device validation.
+        """Patch the specified device properties in Core Metadata and the local cache
+        with bypassValidation=true to skip device validation.
 
+        The cache is updated first (validation skipped), then Core Metadata is patched.
+        On metadata failure the cache is restored from a snapshot and the error is
+        propagated.
         """
         self._patch_device_impl(update_device, bypass_validation=True)
 
@@ -423,8 +436,8 @@ The cache copy is not updated
         """Remove the specified DeviceProfile by name from the cache and ensure that the
         instance in Core Metadata is also removed.
 
-        The
-        Profile is deleted from Core Metadata first and then removed from the cache.
+        The cache entry is removed first, then Core Metadata is deleted. On metadata
+        failure the cache entry is restored and the error is propagated.
 
         Raises:
             EdgexError: When the Profile is not in the cache.
@@ -443,9 +456,8 @@ The cache copy is not updated
     def add_provision_watcher(self, watcher: "ProvisionWatcher") -> str:
         """Add a new Watcher to the cache and Core Metadata.
 
-        In
-The watcher is only added to
-        Core Metadata (a placeholder for now) and the cache is not updated here (as in Go).
+        The cache entry is added first, then Core Metadata is written. On metadata
+        failure the cache entry is rolled back and the error is propagated.
 
         Returns:
             The new Watcher id.
@@ -488,11 +500,10 @@ The watcher is only added to
         return watcher
 
     def update_provision_watcher(self, watcher: "ProvisionWatcher") -> None:
-        """Update the Watcher in Core Metadata.
+        """Update the Watcher in Core Metadata and the local cache.
 
-        In
-The cache copy is not updated
-        here (as in Go).
+        The cache is updated first, then Core Metadata. On metadata failure the cache
+        is restored from a snapshot and the error is propagated.
 
         Raises:
             EdgexError: When the Watcher is not in the cache.
@@ -510,9 +521,8 @@ The cache copy is not updated
         """Remove the specified Watcher by name from the cache and ensure that the
         instance in Core Metadata is also removed.
 
-        Mirrors
-        the Go managed method, the watcher is only deleted from Core Metadata (a
-        placeholder for now) and the cache is not updated here (as in Go).
+        The cache entry is removed first, then Core Metadata is deleted. On metadata
+        failure the cache entry is restored and the error is propagated.
 
         Raises:
             EdgexError: When the Watcher is not in the cache.
