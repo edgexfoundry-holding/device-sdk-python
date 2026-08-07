@@ -46,6 +46,13 @@ Device:
   Discovery:
     Enabled: true
     Interval: "30s"
+  # Device Down auto-recovery (mirrors Go device-sdk-go)
+  AllowedFails: 3              # max allowed request failures before marking device DOWN
+  DeviceDownTimeout: 30        # seconds to wait before retrying a DOWN device
+  AsyncBufferSize: 100         # buffer size for async readings
+  MaxCmdResultLen: 1024        # max command result length
+  MaxEventSize: 4096           # max event size in bytes
+  ReadingUnits: true           # include units in readings
   AutoEvents:
     SendChangedReadingsOnly: false
 

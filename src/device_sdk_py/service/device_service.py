@@ -176,6 +176,9 @@ class DeviceService(DeviceServiceSDK):
         self._profile_scan_stop_events: Dict[str, threading.Event] = {}
         self._discovery_thread: Optional[threading.Thread] = None
 
+        #: Device return pump for Device Down auto-recovery.
+        self._device_return_thread: Optional[threading.Thread] = None
+
     # -- Device management ---------------------------------------------------
 
     def add_device(self, device: "Device") -> str:
@@ -1165,7 +1168,8 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
         """Signal background pumps/subscriptions to stop and cleanup."""
         self._shutdown_event.set()
         for t in (self._async_pump_thread, self._discovered_pump_thread,
-                  self._command_sub_thread, self._system_events_thread):
+                  self._command_sub_thread, self._system_events_thread,
+                  self._device_return_thread):
             if t is not None and t.is_alive():
                 t.join(timeout=2.0)
         if self._metadata_executor is not None:
@@ -1223,6 +1227,13 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
         self._discovered_pump_thread = threading.Thread(target=discovered_pump, daemon=True, name="discovered-pump")
         self._async_pump_thread.start()
         self._discovered_pump_thread.start()
+        # Device Down auto-recovery (deviceReturn) - only if configured
+        device_opt = getattr(self.configuration, "device", None)
+        down_timeout = getattr(device_opt, "device_down_timeout", 0) if device_opt else 0
+        if down_timeout > 0:
+            self._device_return_thread = threading.Thread(target=self._device_return_pump, daemon=True, name="device-return")
+            self._device_return_thread.start()
+            self._logger.info("Device return pump started (timeout=%ds)", down_timeout)
         self._logger.info("Async pumps started")
 
     def _process_async_values(self, acv: AsyncValues, cfg: MessageBusConfig) -> None:
@@ -1341,6 +1352,61 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
                 if not blocked:
                     return True
         return False
+
+    def _device_return_pump(self) -> None:
+        """Background pump that retries DOWN devices after DeviceDownTimeout.
+
+        For each device in DOWN state, waits for DeviceDownTimeout seconds then
+        attempts to restore it by triggering a read command (which will call
+        device_request_succeeded on success). This mirrors the Go
+        `autodiscovery.DeviceReturn` loop.
+        """
+        self._logger.debug("Device return pump started")
+        while not self._shutdown_event.is_set():
+            try:
+                device_opt = getattr(self.configuration, "device", None)
+                down_timeout = getattr(device_opt, "device_down_timeout", 0) if device_opt else 0
+                if down_timeout <= 0:
+                    break
+                # Sleep for the timeout period, but check shutdown periodically
+                for _ in range(down_timeout):
+                    if self._shutdown_event.is_set():
+                        break
+                    time.sleep(1)
+                if self._shutdown_event.is_set():
+                    break
+
+                # Find all DOWN devices
+                down_devices = [
+                    d for d in Devices().all()
+                    if d.operating_state == OPERATING_STATE_DOWN
+                ]
+                for device in down_devices:
+                    if self._shutdown_event.is_set():
+                        break
+                    self._logger.info("Attempting to restore device %s via deviceReturn", device.name)
+                    # Try to read from the device - this will call the driver
+                    try:
+                        # Trigger a command read to test device connectivity
+                        # The driver's handle_read_commands will be called
+                        # On success, device_request_succeeded will be called and restore UP state
+                        from ..application import command_read
+                        command_read(
+                            device_name=device.name,
+                            correlation_id=str(time.time_ns()),
+                            command_name="",
+                            driver=self.driver,
+                            configuration=self.configuration,
+                            attributes="",
+                            regex_cmd=False,
+                            device_service=self,
+                            logger=self._logger,
+                        )
+                    except Exception as exc:  # pylint: disable=broad-except
+                        self._logger.debug("Device return attempt failed for %s: %s", device.name, exc)
+            except Exception as exc:  # pylint: disable=broad-except
+                self._logger.error("Device return pump error: %s", exc)
+        self._logger.debug("Device return pump stopped")
 
     def _publish_discovery_progress(self, progress: int, count: int, message: str) -> None:
         """Publish device discovery progress system event."""

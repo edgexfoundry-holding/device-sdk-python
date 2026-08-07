@@ -134,13 +134,13 @@ def decrease_failure_count(device_name: str) -> int:
 
 
 def device_request_failed(device_name: str, configuration: Any,
-                          logger: Optional[logging.Logger] = None) -> None:
+                          logger: Optional[logging.Logger] = None,
+                          device_service: Any = None) -> None:
     """Record a failed Device request and, once the allowed failures are exhausted, mark
     the Device as non-operational.
 
-    The Core Metadata
-    update and the background retry loop (`deviceReturn`) are deferred to the port of
-    devicereturn.go; this function only tracks the failures and updates the local state.
+    The Core Metadata update and the background retry loop (`deviceReturn`) are
+    triggered when failures are exhausted.
     """
     log = logger or _logger
     if _device_option(configuration, "allowed_fails", 0) > 0:
@@ -150,14 +150,18 @@ def device_request_failed(device_name: str, configuration: Any,
                 return
             if device.operating_state != OPERATING_STATE_DOWN:
                 log.info("Marking device %s non-operational", device_name)
-                update_operating_state(device_name, OPERATING_STATE_DOWN, log)
+                if device_service is not None and hasattr(device_service, "update_device_operating_state"):
+                    device_service.update_device_operating_state(device_name, OPERATING_STATE_DOWN)
+                else:
+                    update_operating_state(device_name, OPERATING_STATE_DOWN, log)
             if _device_option(configuration, "device_down_timeout", 0) > 0:
                 log.warning("Will retry device %s in %s seconds", device_name,
                             _device_option(configuration, "device_down_timeout", 0))
 
 
 def device_request_succeeded(device: Device, configuration: Any,
-                             logger: Optional[logging.Logger] = None) -> None:
+                             logger: Optional[logging.Logger] = None,
+                             device_service: Any = None) -> None:
     """Record a successful Device request, resetting the allowed failures count and
     restoring the Device operating state when it was down.
 
@@ -168,7 +172,10 @@ def device_request_succeeded(device: Device, configuration: Any,
         set_failure_count(device.name, allowed_fails)
         if device.operating_state == OPERATING_STATE_DOWN:
             log.info("Device %s is operational again", device.name)
-            update_operating_state(device.name, OPERATING_STATE_UP, log)
+            if device_service is not None and hasattr(device_service, "update_device_operating_state"):
+                device_service.update_device_operating_state(device.name, OPERATING_STATE_UP)
+            else:
+                update_operating_state(device.name, OPERATING_STATE_UP, log)
 
 
 def command_read(device_name: str, request_id: str, command_name: str, *,
@@ -219,10 +226,10 @@ When the name refers to a DeviceCommand the whole command is read; a
             event = _read_device_resource(device, command_name, attributes, driver,
                                           configuration)
     except EdgexError:
-        device_request_failed(device_name, configuration, log)
+        device_request_failed(device_name, configuration, log, device_service)
         raise
 
-    device_request_succeeded(device, configuration, log)
+    device_request_succeeded(device, configuration, log, device_service)
     Devices().set_last_connected_by_name(device_name)
     log.debug("GET Device Command successfully. Device: %s, Source: %s, "
               "X-Correlation-ID: %s", device_name, command_name, request_id)
@@ -274,10 +281,10 @@ When the name refers to a DeviceCommand all its ResourceOperations are
             event = _write_device_resource(device, command_name, attributes, requests,
                                            driver, configuration)
     except EdgexError:
-        device_request_failed(device_name, configuration, log)
+        device_request_failed(device_name, configuration, log, device_service)
         raise
 
-    device_request_succeeded(device, configuration, log)
+    device_request_succeeded(device, configuration, log, device_service)
     Devices().set_last_connected_by_name(device_name)
     log.debug("SET Device Command successfully. Device: %s, Source: %s, "
               "X-Correlation-ID: %s", device_name, command_name, request_id)

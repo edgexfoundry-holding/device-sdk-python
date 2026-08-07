@@ -76,13 +76,22 @@ class _MessageBus:
 
 
 class _Device:
-    """Mimics the EdgeX ``configurationstruct.Device`` (labels, resource dirs, discovery)."""
+    """Mimics the EdgeX ``configurationstruct.Device`` (labels, resource dirs, discovery, device down)."""
 
     def __init__(self, labels=None) -> None:
         self.labels = list(labels or [])
         self.profiles_dir = "./res/profiles"
         self.devices_dir = "./res/devices"
         self.provision_watchers_dir = "./res/provisionwatchers"
+        self.discovery = None
+        # Device Down auto-recovery options
+        self.allowed_fails = 3
+        self.device_down_timeout = 30
+        self.async_buffer_size = 100
+        self.max_cmd_result_len = 1024
+        self.max_event_size = 4096
+        self.reading_units = True
+        self.send_changed_readings_only = False_watchers_dir = "./res/provisionwatchers"
         self.discovery = None
 
 
@@ -163,6 +172,13 @@ class Configuration:
             optional=message_bus.get("Optional", {}) or {})
 
         config.device = _Device(labels=device.get("Labels") or [])
+        config.device.allowed_fails = int(get_val(device, "AllowedFails") or 3)
+        config.device.device_down_timeout = int(get_val(device, "DeviceDownTimeout") or 30)
+        config.device.async_buffer_size = int(get_val(device, "AsyncBufferSize") or 100)
+        config.device.max_cmd_result_len = int(get_val(device, "MaxCmdResultLen") or 1024)
+        config.device.max_event_size = int(get_val(device, "MaxEventSize") or 4096)
+        config.device.reading_units = get_val(device, "ReadingUnits", "readingUnits") != "false"
+        config.device.send_changed_readings_only = get_val(device, "SendChangedReadingsOnly", "sendChangedReadingsOnly") == "true"
 
         startup_msg = get_val(service, "StartupMsg")
         if startup_msg:
