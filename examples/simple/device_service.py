@@ -174,8 +174,31 @@ class SimpleDriver(ProtocolDriver):
     """A toy ProtocolDriver that returns a synthetic, type-correct reading for any Get."""
 
     def initialize(self, sdk: Any) -> None:
-        # In Go device-simple this is a no-op; retain the SDK for async reads.
+        # In Go device-simple this is a no-op; retain the SDK for async reads and discovery.
         self._sdk = sdk
+
+    def discover(self) -> None:
+        """Trigger protocol-specific device discovery.
+
+        Simulates discovering a device and sends it to the SDK via the discovered
+        device channel. In a real driver, this would scan the network/protocol
+        for devices and emit DiscoveredDevice objects.
+        """
+        if not hasattr(self, "_sdk") or self._sdk is None:
+            print("Warning: SDK not initialized, cannot discover devices")
+            return
+        from device_sdk_py.models import DiscoveredDevice
+        d = DiscoveredDevice(
+            name="simulated-sensor",
+            protocols={"modbus": {"address": "1", "port": "502"}},
+            description="Simulated Modbus sensor",
+            labels=["simulated", "modbus"],
+        )
+        try:
+            self._sdk.discovered_device_channel().put([d])
+            print(f"Discovered device: {d.name}")
+        except Exception as exc:
+            print(f"Failed to send discovered device: {exc}")
 
     def _default_value(self, value_type: str) -> Any:
         if value_type == VALUETYPE_BOOL:

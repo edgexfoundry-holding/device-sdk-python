@@ -170,6 +170,11 @@ class DeviceService(DeviceServiceSDK):
         #: Created lazily by `_run_metadata` and shut down in `_shutdown`.
         self._metadata_executor: Optional[ThreadPoolExecutor] = None
 
+        #: Discovery / profile-scan tracking for stop handlers.
+        self._discovery_stop_events: Dict[str, threading.Event] = {}
+        self._profile_scan_stop_events: Dict[str, threading.Event] = {}
+        self._discovery_thread: Optional[threading.Thread] = None
+
     # -- Device management ---------------------------------------------------
 
     def add_device(self, device: "Device") -> str:
@@ -1370,6 +1375,102 @@ event_type=DEVICE_SYSTEM_EVENT_TYPE, # profile-scan uses device type in Go
         except Exception as exc: # pylint: disable=broad-except
             self._logger.error("Failed to publish profile scan progress: %s", exc)
 
+    # -- Discovery / Profile Scan stop handlers ----------------------------------------
+
+    def _device_discovery_stop_handler(self, request_id: str, options: Dict[str, Any]) -> None:
+        """Stop a running device discovery by request_id.
+
+        Sets the stop event for the discovery, signaling the driver's discover()
+        to terminate early if it checks the event. The discovery progress is
+        published as -1% (error) when stopped.
+        """
+        self._logger.info("Stopping device discovery %s", request_id)
+        event = self._discovery_stop_events.pop(request_id, None)
+        if event is not None:
+            event.set()
+            self._publish_discovery_progress(-1, 0, f"Discovery {request_id} stopped")
+        if self._discovery_thread is not None:
+            self._discovery_thread.join(timeout=2.0)
+            self._discovery_thread = None
+
+    def _profile_scan_handler(self, device_name: str, profile_name: str,
+                              request_id: str, options: Dict[str, Any]) -> None:
+        """Trigger a profile scan for the given device.
+
+        Creates a DeviceProfile by inspecting the device's protocol properties
+        and registers it with Core Metadata. The scan runs in a background thread
+        and publishes progress events (0% start, 100% complete, -1% error).
+        """
+        self._logger.info("Starting profile scan for device %s -> profile %s (request %s)",
+                          device_name, profile_name, request_id)
+
+        # Signal stop event for this scan
+        stop_event = threading.Event()
+        self._profile_scan_stop_events[request_id] = stop_event
+
+        def run_scan():
+            try:
+                # Check for early stop
+                if stop_event.is_set():
+                    self._logger.info("Profile scan %s stopped before start", request_id)
+                    return
+
+                device, ok = Devices().for_name(device_name)
+                if not ok:
+                    self._logger.error("Device %s not found for profile scan", device_name)
+                    self._publish_profile_scan_progress(request_id, -1, f"Device {device_name} not found")
+                    return
+
+                # Build a basic DeviceProfile from the device's protocols
+                from ..internal.cache import DeviceProfile, DeviceResource, ResourceProperties
+                profile = DeviceProfile(
+                    name=profile_name,
+                    description=f"Auto-generated profile for {device_name}",
+                    device_resources=[],
+                    device_commands=[],
+                )
+                # For each protocol, add a device resource
+                for proto_name, proto_props in device.protocols.items():
+                    for prop_name, prop_value in proto_props.items():
+                        profile.device_resources.append(DeviceResource(
+                            name=prop_name,
+                            description=f"Auto-discovered from {proto_name}",
+                            properties=ResourceProperties(value_type="String"),
+                        ))
+
+                # Register with Core Metadata (cache-first + rollback)
+                self.add_device_profile(profile)
+                self._logger.info("Profile scan %s completed for %s", request_id, device_name)
+                self._publish_profile_scan_progress(request_id, 100, "Profile scan completed")
+
+            except Exception as exc: # pylint: disable=broad-except
+                self._logger.exception("Profile scan %s failed: %s", request_id, exc)
+                self._publish_profile_scan_progress(request_id, -1, f"Profile scan failed: {exc}")
+            finally:
+                self._profile_scan_stop_events.pop(request_id, None)
+
+        thread = threading.Thread(target=run_scan, daemon=True, name=f"profile-scan-{request_id}")
+        thread.start()
+
+    def _profile_scan_stop_handler(self, device_name: str, options: Dict[str, Any]) -> None:
+        """Stop a running profile scan for the given device.
+
+        Finds the scan by device_name (or request_id in options) and signals it to stop.
+        """
+        self._logger.info("Stopping profile scan for device %s", device_name)
+        # Look for scan by device_name in options or by any active scan for this device
+        request_id = options.get("requestId", [""])[0] if isinstance(options.get("requestId"), list) else options.get("requestId", "")
+        if request_id:
+            event = self._profile_scan_stop_events.pop(request_id, None)
+            if event:
+                event.set()
+                self._publish_profile_scan_progress(request_id, -1, f"Profile scan for {device_name} stopped")
+                return
+        # Fallback: stop all scans for this device (simplified)
+        for rid, event in list(self._profile_scan_stop_events.items()):
+            event.set()
+            self._publish_profile_scan_progress(rid, -1, f"Profile scan for {device_name} stopped")
+
     # -- Command subscription (mirrors Go messaging.SubscribeCommands) --------------------
 
     def _start_command_subscription(self) -> None:
@@ -1987,8 +2088,11 @@ Stores the custom configuration so it can be included in the /config
             logger=self._logger,
             configuration=self.configuration,
             driver=self.driver,
-            device_service=self.device_service_model,
-            send_event_handler=self._send_event_handler)
+            device_service=self,  # full DeviceService for discovery/profile-scan tracking
+            send_event_handler=self._send_event_handler,
+            device_discovery_stop_handler=self._device_discovery_stop_handler,
+            profile_scan_handler=self._profile_scan_handler,
+            profile_scan_stop_handler=self._profile_scan_stop_handler)
         self.controller.init_rest_routes()
 
         for route, handler, methods in self._pending_custom_routes:

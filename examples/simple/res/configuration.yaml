@@ -44,7 +44,7 @@ Device:
   DevicesDir: "./res/devices"
   ProvisionWatchersDir: "./res/provisionwatchers"
   Discovery:
-    Enabled: false
+    Enabled: true
     Interval: "30s"
   AutoEvents:
     SendChangedReadingsOnly: false

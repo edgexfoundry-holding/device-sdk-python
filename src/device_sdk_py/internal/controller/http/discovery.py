@@ -113,6 +113,11 @@ The Python configuration model is ported in a later phase, so the
         driver = self.driver
         device_service = self.device_service
 
+        # Create stop event for this discovery and register it
+        stop_event = threading.Event()
+        if device_service is not None:
+            device_service._discovery_stop_events[correlation_id] = stop_event
+
         def run():
             # Publish start progress (0%)
             if device_service is not None and hasattr(device_service, "_publish_discovery_progress"):
@@ -131,9 +136,17 @@ The Python configuration model is ported in a later phase, so the
                 if device_service is not None and hasattr(device_service, "_publish_discovery_progress"):
                     device_service._publish_discovery_progress(-1, 0, "Discovery failed")
             finally:
+                # Clean up
+                if device_service is not None:
+                    device_service._discovery_stop_events.pop(correlation_id, None)
+                    if device_service._discovery_thread is not None:
+                        device_service._discovery_thread = None
                 self.logger.info("Discovery end. Correlation Id: %s", correlation_id)
 
-        threading.Thread(target=run, daemon=True).start()
+        thread = threading.Thread(target=run, daemon=True)
+        if device_service is not None:
+            device_service._discovery_thread = thread
+        thread.start()
 
         response = base_response(correlation_id, "Device Discovery is triggered.",
                                  HTTPStatus.ACCEPTED)
