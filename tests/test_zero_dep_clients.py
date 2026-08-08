@@ -70,8 +70,8 @@ class TestSecretProvider(unittest.TestCase):
     """Test the zero-dependency SecretProvider implementation."""
 
     def setUp(self):
-        from device_sdk_py.internal.clients.secret import SecretProvider
-        self.provider = SecretProvider()
+        from device_sdk_py.internal.clients.secret import InMemorySecretProvider
+        self.provider = InMemorySecretProvider()
 
     def test_store_and_get_secret(self):
         self.provider.store_secret("my-path", "username", "admin")

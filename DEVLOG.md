@@ -21,15 +21,34 @@ This document calibrates the original gap analysis (G1-G13) against the actual i
 | **G12** | Progress topic format (`device/progress` → `device/discovery|profilescan`) | ✅ **DONE** (G12) | Action constants: `discovery`, `profilescan` |
 | **G13** | `_advertised_host` UDP probe to 8.8.8.8:80 | ✅ **DONE** (G13) | Configurable, timeout, logging, fallback |
 
+## Secure Mode (post-G13)
+
+EdgeX v4.0.2 replaces Consul with **core-keeper** and Vault with **OpenBao**;
+secure mode (TLS, JWT, Secure MessageBus) must be supported.
+
+| Item | Status | Notes |
+|------|--------|-------|
+| SecretProvider abstraction | ✅ DONE | `SecretProvider` ABC + `InMemorySecretProvider` + `OpenBaoSecretProvider` |
+| OpenBao KV v2 client | ✅ DONE | `secret/data/<path>`, token file, namespace, auto token renewal thread |
+| Secret provider factory | ✅ DONE | `create_secret_provider(mode)` with `auto` env detection (`EDGEX_SECRETSTORE_TOKEN_FILE`, `VAULT_ADDR`, `OPENBAO_ADDR`) |
+| JWT authentication | ✅ DONE | `JWTAuthenticator` (RS256, JWKS, issuer/audience, leeway), `JWTAuthMiddleware` (401 on failure, public paths) |
+| Secure-mode config | ✅ DONE | `EDGEX_SECURE_MODE` env / `device.secure_mode`; TLS for uvicorn (cert/key files) |
+| Readiness endpoint | ✅ DONE | `/api/v3/readiness` for security-bootstrapper |
+| ExtendedProtocolDriver | ✅ DONE | `profile_scan` / `stop_device_discovery` / `stop_profile_scan`; extends `ProtocolDriver` |
+| Auto-discovery scheduler | ✅ DONE | `internal/autodiscovery` mirror of Go; discovery locker + scheduler + bootstrap |
+| ProfileScanRequest DTO | ✅ DONE | `models/profilescan.py` mirror of go-mod-core-contracts v4 |
+| Security registration | ✅ DONE | `EDGEX_ADD_SECRETSTORE_TOKENS` / `EDGEX_ADD_KNOWN_SECRETS` / `EDGEX_ADD_PROXY_ROUTE` documented + logged |
+| Secure mode tests | ✅ DONE | `test_secure_mode.py`, `test_autodiscovery.py`, `test_extended_driver.py` |
+
 ## Implementation Statistics
 
 | Metric | Value |
 |--------|-------|
-| Total tests | 155 |
-| Test files | 8 |
-| Lines of test code | ~4,500 |
-| Commits | 12 |
-| Milestones | 10 + G12/G13 |
+| Total tests | 206 |
+| Test files | 11 |
+| Lines of test code | ~5,900 |
+| Commits | 13 |
+| Milestones | 10 + G12/G13 + Secure Mode |
 
 ## Test Coverage (pytest-cov)
 
@@ -76,7 +95,10 @@ This document calibrates the original gap analysis (G1-G13) against the actual i
 | `test_config_options.py` | 15 | Config option runtime |
 | `test_device_down.py` | 14 | Failure tracking + return loop |
 | `test_command_application.py` | 16 | Command read/write + validation |
-| **Total** | **155** | |
+| `test_secure_mode.py` | 34 | JWT, Secret providers, readiness |
+| `test_autodiscovery.py` | 9 | Discovery locker/scheduler/bootstrap |
+| `test_extended_driver.py` | 8 | ExtendedProtocolDriver + ProfileScan DTO |
+| **Total** | **206** | |
 
 ## Commit History
 
@@ -93,6 +115,7 @@ af4f6af feat: G8 public stop() method (M8)
 55f338e feat: G9 config options honored (M9)
 1b5024b test: add test_command_application.py + fix device DOWN validation
 [HEAD] feat: G12 progress topic format v4.0.2 + G13 _advertised_host fix
+[HEAD] feat: Secure Mode (OpenBao SecretProvider, JWT auth, readiness, ExtendedProtocolDriver, autodiscovery, ProfileScan DTO)
 ```
 
 ## Validation Commands
