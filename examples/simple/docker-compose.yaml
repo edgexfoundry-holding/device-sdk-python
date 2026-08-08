@@ -7,6 +7,11 @@
 # Note: For full EdgeX deployment, use EdgeX's docker-compose which already includes
 # MQTT broker (messagebus), core-metadata, core-data, etc. This file is for
 # standalone testing of device-simple only.
+# For Secure Mode, add the following:
+#   - EDGEX_SECURE_MODE=true to device-simple environment
+#   - TLS certificates in a volume
+#   - security-bootstrapper and related security services (from edgex-compose)
+#   - EDGEX_ADD_PROXY_ROUTE on security-proxy-setup
 
 version: '3.8'
 
@@ -16,6 +21,15 @@ services:
     container_name: edgex-device-simple
     environment:
       SERVICE_HOST: edgex-device-simple
+      # Secure Mode configuration:
+      # EDGEX_SECURE_MODE: "true"
+      # SSLCERTFILE: "/etc/edgex/secrets/device-simple/cert.pem"
+      # SSLKEYFILE: "/etc/edgex/secrets/device-simple/key.pem"
+      # EDGEX_SECRETSTORE_TOKEN_FILE: "/tmp/edgex/secrets/device-simple/token"
+      # VAULT_ADDR: "http://openbao:8200"
+      # EDGEX_JWT_JWKS_URL: "http://openbao:8200/v1/identity/oidc/.well-known/jwks.json"
+      # EDGEX_JWT_ISSUER: "http://openbao:8200"
+      # EDGEX_JWT_AUDIENCE: "device-simple"
     ports:
       - "59986:59986"
     networks:
@@ -23,7 +37,29 @@ services:
     volumes:
       # use host timezone
       - /etc/localtime:/etc/localtime:ro
+      # Secure Mode volumes (uncomment when running in secure mode):
+      # - ./certs:/etc/edgex/secrets/device-simple:ro,z
+      # - edgex-init:/edgex-init:ro,z
+      # - edgex-secrets:/tmp/edgex/secrets/device-simple:ro,z
 
-networks:
-  edgex-network:
-    driver: bridge
+# For Secure Mode, uncomment and add security services from edgex-compose:
+# security-bootstrapper:
+#   ...
+# security-proxy-setup:
+#   environment:
+#     EDGEX_ADD_PROXY_ROUTE: "device-simple.http://edgex-device-simple:59986"
+#   depends_on:
+#     - security-bootstrapper
+#   volumes:
+#     - edgex-init:/edgex-init:ro,z
+# secretstore-setup:
+#   environment:
+#     EDGEX_ADD_SECRETSTORE_TOKENS: "device-simple"
+#     EDGEX_ADD_KNOWN_SECRETS: "postgres[device-simple],message-bus[device-simple],message-bus[device-virtual]"
+#   volumes:
+#     - edgex-init:/edgex-init:ro,z
+
+# Secure Mode volumes (uncomment when running in secure mode):
+# volumes:
+#   edgex-init:
+#   edgex-secrets:

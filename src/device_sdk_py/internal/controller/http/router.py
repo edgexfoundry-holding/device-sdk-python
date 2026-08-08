@@ -21,6 +21,7 @@ Go layout while staying on a single `RestController` type.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from dataclasses import is_dataclass
 from datetime import datetime
@@ -46,6 +47,12 @@ from ...common.consts import (
     SERVICE_VERSION,
 )
 from ...common.utils import EdgexError, create_edgx_error, KIND_SERVER_ERROR
+from .auth import (
+    JWTAuthMiddleware,
+    get_jwt_authenticator,
+    JWTAuthenticator,
+    is_public_endpoint,
+)
 from._utils import (
     base_response,
     send_response,
@@ -97,6 +104,49 @@ class RestController(DiscoveryController, CommandController):
         self.send_event_handler = send_event_handler
         self.metrics_provider = metrics_provider
 
+        # JWT Authentication (secure mode)
+        self._jwt_authenticator = None
+        self._setup_jwt_auth()
+
+    def _setup_jwt_auth(self) -> None:
+        """Setup JWT authentication middleware for secure mode."""
+        if self.configuration is None:
+            return
+
+        device_opt = getattr(self.configuration, "device", None)
+        if device_opt is None:
+            return
+
+        secure_mode = getattr(device_opt, "secure_mode", False)
+        if not secure_mode:
+            return
+
+        # Check for JWT configuration
+        jwks_url = getattr(device_opt, "jwt_jwks_url", None) or os.environ.get("EDGEX_JWT_JWKS_URL")
+        public_key = getattr(device_opt, "jwt_public_key", None) or os.environ.get("EDGEX_JWT_PUBLIC_KEY")
+        issuer = getattr(device_opt, "jwt_issuer", None) or os.environ.get("EDGEX_JWT_ISSUER")
+        audience = getattr(device_opt, "jwt_audience", None) or os.environ.get("EDGEX_JWT_AUDIENCE")
+
+        if not (jwks_url or public_key):
+            self.logger.warning("Secure mode enabled but no JWT configuration found")
+            return
+
+        self._jwt_authenticator = get_jwt_authenticator(
+            public_key=public_key,
+            jwks_url=jwks_url,
+            issuer=issuer,
+            audience=audience,
+        )
+
+        # Add JWT middleware to router
+        self.router.add_middleware(
+            JWTAuthMiddleware,
+            authenticator=self._jwt_authenticator,
+            public_paths=["/api/v3/ping", "/api/v3/version", "/api/v3/config", "/api/v3/metrics"],
+            public_prefixes=["/docs", "/openapi.json", "/redoc", "/health"],
+        )
+        self.logger.info("JWT authentication enabled for secure mode")
+
     # -- route registration ---------------------------------------------------
 
     def init_rest_routes(self) -> None:
@@ -107,6 +157,9 @@ class RestController(DiscoveryController, CommandController):
         the Python SDK has no separate common controller.
         """
         self.logger.info("Registering routes...")
+
+        # Readiness probe (for security-bootstrapper)
+        self._init_readiness_route()
 
         # common endpoints
         self.add_reserved_route(API_PING_ROUTE, self.ping, ["GET"])
@@ -157,6 +210,21 @@ class RestController(DiscoveryController, CommandController):
 
         """
         self.custom_config = custom_config
+
+    # -- readiness / health check (for security-bootstrapper) ----------------------
+
+    def readiness(self, request: Request) -> Response:
+        """Readiness probe endpoint for security-bootstrapper.
+
+        Returns 200 when the service is ready to accept traffic.
+        The security-bootstrapper polls this endpoint to determine when the service
+        is ready to accept traffic after security initialization.
+        """
+        return send_response(request, {"status": "ready"}, "/api/v3/readiness", HTTPStatus.OK)
+
+    def _init_readiness_route(self) -> None:
+        """Initialize the readiness endpoint for security-bootstrapper compatibility."""
+        self.add_reserved_route("/api/v3/readiness", self.readiness, ["GET"])
 
     # -- event publishing -------------------------------------------------------
 

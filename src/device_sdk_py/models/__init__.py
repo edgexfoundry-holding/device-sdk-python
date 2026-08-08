@@ -8,6 +8,7 @@ Data models for the EdgeX Device Service SDK - Exports:
     AsyncValues: An asynchronous batch of readings produced by a ProtocolDriver.
     DiscoveredDevice: Information about a device found during discovery.
     Notify / Progress / DeviceDiscoveryProgress: System event notification payloads.
+    ProfileScanRequest: Request payload for profile scanning.
 """
 
 from .async_values import AsyncValues
@@ -50,15 +51,19 @@ from .command_value import (
 )
 from .discovered_device import DiscoveredDevice, ProtocolProperties
 from .notify import DeviceDiscoveryProgress, Notify, Progress
+from .profilescan import ProfileScanRequest
+from .providers import DeviceProfile
 
 __all__ = [
     "AsyncValues",
     "CommandRequest",
     "CommandValue",
+    "DeviceProfile",
     "DiscoveredDevice",
     "DeviceDiscoveryProgress",
     "Notify",
     "Progress",
+    "ProfileScanRequest",
     "ProtocolProperties",
     "ValueTypeError",
     "VALUETYPES",
@@ -74,7 +79,9 @@ __all__ = [
     "VALUETYPE_INT32",
     "VALUETYPE_INT64",
     "VALUETYPE_FLOAT32",
+    "VALUETYPE_FLOAT32_ARRAY",
     "VALUETYPE_FLOAT64",
+    "VALUETYPE_FLOAT64_ARRAY",
     "VALUETYPE_BINARY",
     "VALUETYPE_BOOL_ARRAY",
     "VALUETYPE_STRING_ARRAY",

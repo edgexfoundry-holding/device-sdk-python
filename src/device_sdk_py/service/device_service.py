@@ -24,11 +24,13 @@ import importlib
 import logging
 import os
 import queue
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
+from ..internal.autodiscovery import bootstrap_autodiscovery
 from ..internal.cache import (
     ADMIN_STATE_UNLOCKED,
     AutoEvent,
@@ -165,6 +167,9 @@ class DeviceService(DeviceServiceSDK):
         self._system_events_thread: Optional[threading.Thread] = None
         #: Shutdown signal for background pumps.
         self._shutdown_event = threading.Event()
+
+        #: Security mode configuration
+        self._secure_mode = self._read_secure_mode_config()
 
         #: The lazily imported AutoEvent manager (see `_auto_event_manager`).
         self._auto_event_manager_instance: Any = None
@@ -833,6 +838,28 @@ talks to Core Metadata to self-register and provision its resources. The base UR
                 max_workers=4, thread_name_prefix="metadata")
         return self._metadata_executor.submit(fn).result()
 
+    def _read_secure_mode_config(self) -> bool:
+        """Read and parse the secure mode configuration from environment and configuration.
+
+        Returns:
+            True if secure mode is enabled, False otherwise.
+        """
+        # Check environment variable first
+        secure_mode_env = os.environ.get("EDGEX_SECURE_MODE", "").lower()
+        if secure_mode_env in ("true", "1", "yes"):
+            return True
+        if secure_mode_env in ("false", "0", "no"):
+            return False
+
+        # Check configuration object
+        device_opt = getattr(self.configuration, "device", None)
+        if device_opt is not None:
+            secure_mode = getattr(device_opt, "secure_mode", None)
+            if secure_mode is not None:
+                return bool(secure_mode)
+
+        return False
+
     def _validate_device(self, device: Device, bypass_validation: bool) -> None:
         """Run the ProtocolDriver's in-process device validation when required.
 
@@ -966,7 +993,76 @@ hostname IP. Extended Core services (core-command) reach this address to execute
                 self._logger.debug("Failed to auto-detect advertised host, falling back to localhost")
         return "localhost"
 
-    def _device_labels(self) -> List[str]:
+    # -- Security integration -------------------------------------------------------
+
+    def _register_with_security_services(self) -> None:
+        """Register this Device Service with EdgeX security services.
+
+        Registers the service with:
+        - secretstore-setup (via EDGEX_ADD_SECRETSTORE_TOKENS)
+        - security-proxy-setup / API Gateway (via EDGEX_ADD_PROXY_ROUTE)
+        - Known secrets (EDGEX_ADD_KNOWN_SECRETS)
+
+        This is a best-effort operation; failures are logged but do not prevent
+        the service from starting.
+        """
+        if not self._secure_mode:
+            return
+
+        # Register with secretstore-setup
+        self._register_secretstore_tokens()
+
+        # Register with API Gateway (security-proxy-setup)
+        self._register_api_gateway_route()
+
+        # Register known secrets
+        self._register_known_secrets()
+
+    def _register_secretstore_tokens(self) -> None:
+        """Register this Device Service with secretstore-setup via EDGEX_ADD_SECRETSTORE_TOKENS.
+
+        In a Docker deployment, the secretstore-setup service reads the
+        EDGEX_ADD_SECRETSTORE_TOKENS environment variable (comma-separated list
+        of service names) and creates Secret Store tokens for each service.
+        This method logs the expected configuration for the deployment.
+        """
+        service_name = self.name()
+        self._logger.info("Security: Registering SecretStore token for service '%s' "
+                          "(set EDGEX_ADD_SECRETSTORE_TOKENS=%s in secretstore-setup env)",
+                          self.name(), service_name)
+
+    def _register_api_gateway_route(self) -> None:
+        """Register this Device Service with the API Gateway via security-proxy-setup.
+
+        The security-proxy-setup service reads EDGEX_ADD_PROXY_ROUTE environment
+        variable (format: "service-key.http://host:port") and configures the
+        API Gateway (Kong) to route requests to this service.
+        """
+        service_name = self.name()
+        route = "{}.http://{}:{}".format(service_name, self._advertised_host(),
+                                         self._http_host_port()[1])
+        self._logger.info("Security: API Gateway route for '%s' -> %s "
+                          "(set EDGEX_ADD_PROXY_ROUTE=%s on security-proxy-setup)",
+                          service_name, route, route)
+
+    def _register_known_secrets(self) -> None:
+        """Register known secrets for this service via EDGEX_ADD_KNOWN_SECRETS.
+
+        The secretstore-setup service reads EDGEX_ADD_KNOWN_SECRETS (comma-separated
+        list of known_secret[service]) and provisions those secrets in the
+        service's Secret Store. The Device Service itself needs the message bus
+        credentials when the MessageBus is secured (MQTT).
+        """
+        service_name = self.name()
+        known_secrets = [
+            f"postgres[{service_name}]",
+            f"message-bus[{service_name}]",
+        ]
+        self._logger.info("Security: Known secrets for service '%s': %s "
+                          "(set EDGEX_ADD_KNOWN_SECRETS=%s on secretstore-setup)",
+                          service_name, ", ".join(known_secrets), ",".join(known_secrets))
+
+    # -- internal helpers -------------------------------------------------------
         """Return the Device labels from the configuration."""
         device = getattr(self.configuration, "device", None)
         labels = getattr(device, "labels", None) if device is not None else None
@@ -1164,6 +1260,10 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
         if self.driver is not None:
             self.driver.start()
 
+        # Security integration: register with secretstore-setup and API Gateway
+        if self._secure_mode:
+            self._register_with_security_services()
+
         self._logger.info("Device Service %s (v%s) started",
                           self.name(), self.version())
 
@@ -1175,8 +1275,29 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
                 "uvicorn is not installed; the HTTP server will not be served. "
                 "Install it to expose the REST API on %s:%s.", host, port)
             return
+
+        # TLS/SSL configuration for secure mode
+        ssl_certfile = None
+        ssl_keyfile = None
+        if self._secure_mode:
+            device_opt = getattr(self.configuration, "device", None)
+            if device_opt is not None:
+                ssl_certfile = getattr(device_opt, "ssl_certfile", None)
+                ssl_keyfile = getattr(device_opt, "ssl_keyfile", None)
+            if not ssl_certfile or not ssl_keyfile:
+                self._logger.warning("Secure mode enabled but SSL cert/key not configured; TLS will not be enabled")
+                ssl_certfile = None
+                ssl_keyfile = None
+
         try:
-            uvicorn.run(self.controller.app(), host=host, port=port, log_level="info")
+            uvicorn.run(
+                self.controller.app(),
+                host=host,
+                port=port,
+                log_level="info",
+                ssl_certfile=ssl_certfile,
+                ssl_keyfile=ssl_keyfile,
+            )
         finally:
             self._shutdown()
 
@@ -1212,6 +1333,12 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
                 self._messaging_client.disconnect()
             except Exception as exc: # pylint: disable=broad-except
                 self._logger.debug("Error disconnecting messaging client: %s", exc)
+        # Close secret provider to stop token renewal thread
+        if hasattr(self, "_secret_provider") and self._secret_provider is not None:
+            try:
+                self._secret_provider.close()
+            except Exception as exc: # pylint: disable=broad-except
+                self._logger.debug("Error closing secret provider: %s", exc)
         self._logger.info("Device Service %s shutdown complete", self.name())
 
     # -- Async pumps (mirrors Go processAsyncResults / processAsyncFilterAndAdd) ---------
@@ -1266,6 +1393,22 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
             self._device_return_thread = threading.Thread(target=self._device_return_pump, daemon=True, name="device-return")
             self._device_return_thread.start()
             self._logger.info("Device return pump started (timeout=%ds)", down_timeout)
+
+        # Auto-discovery scheduler (autodiscovery) - only if enabled
+        discovery_enabled = getattr(device_opt, "discovery", None)
+        if discovery_enabled and getattr(discovery_enabled, "enabled", False):
+            interval_str = getattr(discovery_enabled, "interval", "30s")
+            import re
+            match = re.match(r"(\d+)s", interval_str)
+            discovery_interval = int(match.group(1)) if match else 30
+            self._autodiscovery_thread = bootstrap_autodiscovery(
+                driver=self.driver,
+                device_service=self,
+                shutdown_event=self._shutdown_event,
+                discovery_interval=discovery_interval,
+            )
+            self._logger.info("Auto-discovery scheduler started (interval=%ds)", discovery_interval)
+
         self._logger.info("Async pumps started")
 
     def _process_async_values(self, acv: AsyncValues, cfg: MessageBusConfig) -> None:
@@ -1955,13 +2098,40 @@ Stores the custom configuration so it can be included in the /config
         return self._logger_client
 
     def secret_provider(self) -> SecretProvider:
-        """Return the zero-dependency secret provider.
+        """Return the secret provider (in-memory for insecure, OpenBao for secure).
 
-        The provider uses in-memory storage and provides the EdgeX SecretProvider
-        interface (StoreSecret, GetSecret, GetAllSecrets, DeleteSecret).
+        Automatically detects secure mode from configuration:
+        - If token file exists or VAULT_ADDR/OPENBAO_ADDR set -> OpenBaoSecretProvider
+        - Otherwise -> InMemorySecretProvider (insecure mode)
         """
         if not hasattr(self, "_secret_provider"):
-            self._secret_provider = SecretProvider()
+            from ..internal.clients import create_secret_provider
+
+            # Determine mode from configuration
+            mode = "auto"
+            token_file = None
+            base_url = None
+
+            device_opt = getattr(self.configuration, "device", None)
+            if device_opt is not None:
+                # Check for explicit secure mode config
+                if hasattr(device_opt, "secure_mode"):
+                    mode = "secure" if device_opt.secure_mode else "insecure"
+                # Check for token file path
+                token_file = getattr(device_opt, "secretstore_token_file", None)
+                # Check for vault address
+                base_url = getattr(device_opt, "vault_addr", None) or getattr(device_opt, "openbao_addr", None)
+
+            # Also check environment variables
+            token_file = token_file or os.environ.get("EDGEX_SECRETSTORE_TOKEN_FILE")
+            base_url = base_url or os.environ.get("VAULT_ADDR") or os.environ.get("OPENBAO_ADDR")
+
+            self._secret_provider = create_secret_provider(
+                mode=mode,
+                token_file=token_file,
+                base_url=base_url,
+                logger=self._logger,
+            )
         return self._secret_provider
 
     def metrics_manager(self) -> MetricsManager:

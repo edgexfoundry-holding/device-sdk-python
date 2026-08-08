@@ -34,7 +34,7 @@ _SRC = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src"
 if _SRC not in sys.path:
     sys.path.insert(0, _SRC)
 
-from device_sdk_py.interfaces import ProtocolDriver
+from device_sdk_py.interfaces import ProtocolDriver, ExtendedProtocolDriver
 from device_sdk_py.models import (
     CommandRequest,
     CommandValue,
@@ -66,17 +66,29 @@ class _MessageBus:
 
     def __init__(self, host: str, port: int, base_topic_prefix: str = "edgex",
                  message_bus_type: str = "mqtt", auth_mode: str = "none",
-                 optional: Optional[Dict[str, str]] = None) -> None:
+                 optional: Optional[Dict[str, str]] = None,
+                 # TLS/SSL options for Secure MessageBus
+                 cert_file: str = "", key_file: str = "", ca_file: str = "",
+                 skip_cert_verify: bool = False) -> None:
         self.host = host
         self.port = port
         self.base_topic_prefix = base_topic_prefix
         self.type = message_bus_type
         self.auth_mode = auth_mode
         self.optional = optional or {}
+        # TLS/SSL options for Secure MessageBus
+        if cert_file:
+            self.optional["CertFile"] = cert_file
+        if key_file:
+            self.optional["KeyFile"] = key_file
+        if ca_file:
+            self.optional["CaFile"] = ca_file
+        if skip_cert_verify:
+            self.optional["SkipCertVerify"] = "true"
 
 
 class _Device:
-    """Mimics the EdgeX ``configurationstruct.Device`` (labels, resource dirs, discovery, device down)."""
+    """Mimics the EdgeX ``configurationstruct.Device`` (labels, resource dirs, discovery, device down, security)."""
 
     def __init__(self, labels=None) -> None:
         self.labels = list(labels or [])
@@ -91,7 +103,16 @@ class _Device:
         self.max_cmd_result_len = 1024
         self.max_event_size = 4096
         self.reading_units = True
-        self.send_changed_readings_only = False_watchers_dir = "./res/provisionwatchers"
+        self.send_changed_readings_only = False
+        # Secure mode options
+        self.secure_mode = False
+        self.ssl_certfile = ""
+        self.ssl_keyfile = ""
+        self.secretstore_token_file = ""
+        self.vault_addr = ""
+        self.openbao_addr = ""
+
+        self._watchers_dir = "./res/provisionwatchers"
         self.discovery = None
 
 
@@ -186,8 +207,11 @@ class Configuration:
         return config
 
 
-class SimpleDriver(ProtocolDriver):
-    """A toy ProtocolDriver that returns a synthetic, type-correct reading for any Get."""
+class SimpleDriver(ExtendedProtocolDriver):
+    """A toy ProtocolDriver that returns a synthetic, type-correct reading for any Get.
+    
+    Also implements ExtendedProtocolDriver for profile scanning and discovery control.
+    """
 
     def initialize(self, sdk: Any) -> None:
         # In Go device-simple this is a no-op; retain the SDK for async reads and discovery.
@@ -265,10 +289,103 @@ class SimpleDriver(ProtocolDriver):
                       protocols: Dict[str, Dict[str, Any]]) -> None:
         pass
 
-    def discover(self) -> None:
+    def validate_device(self, device: Any) -> None:
         pass
 
-    def validate_device(self, device: Any) -> None:
+    def discover(self) -> None:
+        """Trigger protocol-specific device discovery.
+
+        Simulates discovering a device and sends it to the SDK via the discovered
+        device channel. In a real driver, this would scan the network/protocol
+        for devices and emit DiscoveredDevice objects.
+        """
+        if not hasattr(self, "_sdk") or self._sdk is None:
+            print("Warning: SDK not initialized, cannot discover devices")
+            return
+        from device_sdk_py.models import DiscoveredDevice
+        d = DiscoveredDevice(
+            name="simulated-sensor",
+            protocols={"modbus": {"address": "1", "port": "502"}},
+            description="Simulated Modbus sensor",
+            labels=["simulated", "modbus"],
+        )
+        try:
+            self._sdk.discovered_device_channel().put([d])
+            print(f"Discovered device: {d.name}")
+        except Exception as exc:
+            print(f"Failed to send discovered device: {exc}")
+
+    # -- ExtendedProtocolDriver methods -----------------------------------------
+
+    def profile_scan(self, device_name: str, profile_name: str, request_id: str,
+                     options: Dict[str, Any]) -> "DeviceProfile":
+        """Trigger a profile scan for the specified device.
+
+        Simulates discovering the device's resources and commands to create
+        a DeviceProfile. In a real driver, this would query the device
+        to discover its resources and commands.
+
+        Args:
+            device_name: Name of the device to scan.
+            profile_name: Name for the generated profile.
+            request_id: Correlation ID for the scan request.
+            options: Additional scan options.
+
+        Returns:
+            The generated DeviceProfile.
+        """
+        from device_sdk_py.internal.cache import DeviceProfile, DeviceResource, ResourceProperties
+        
+        self._logger.info("Starting profile scan for device %s -> profile %s (request %s)",
+                          device_name, profile_name, request_id)
+
+        # Simulate scan delay
+        import time
+        time.sleep(0.1)
+
+        # Build a basic DeviceProfile from the device's protocols
+        profile = DeviceProfile(
+            name=profile_name,
+            description=f"Auto-generated profile for {device_name}",
+            device_resources=[],
+            device_commands=[],
+        )
+        
+        # Get the device from cache to read its protocols
+        from device_sdk_py.internal.cache import Devices
+        device, ok = Devices().for_name(device_name)
+        if ok:
+            for proto_name, proto_props in device.protocols.items():
+                for prop_name, prop_value in proto_props.items():
+                    profile.device_resources.append(DeviceResource(
+                        name=prop_name,
+                        description=f"Auto-discovered from {proto_name}",
+                        properties=ResourceProperties(value_type="String"),
+                    ))
+
+        self._logger.info("Profile scan completed for device %s", device_name)
+        return profile
+
+    def stop_device_discovery(self, request_id: str, options: Dict[str, Any]) -> None:
+        """Stop a running device discovery operation.
+
+        Args:
+            request_id: The correlation ID of the discovery to stop.
+            options: Additional stop options.
+        """
+        self._logger.info("StopDeviceDiscovery called: request_id=%s, options=%s", request_id, options)
+        # In a real driver, this would signal the discovery loop to stop
+        pass
+
+    def stop_profile_scan(self, device_name: str, options: Dict[str, Any]) -> None:
+        """Stop a running profile scan operation.
+
+        Args:
+            device_name: Name of the device whose profile scan should stop.
+            options: Additional stop options.
+        """
+        self._logger.info("StopProfileScan called: device_name=%s, options=%s", device_name, options)
+        # In a real driver, this would signal the profile scan loop to stop
         pass
 
 

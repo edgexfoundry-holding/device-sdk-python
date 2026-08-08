@@ -56,9 +56,27 @@ Device:
   AutoEvents:
     SendChangedReadingsOnly: false
 
-# Core service endpoints - override via env if needed:
-# EDGEX_CORE_DATA_HOST, EDGEX_CORE_DATA_PORT
-# EDGEX_CORE_METADATA_HOST, EDGEX_CORE_METADATA_PORT
-# EDGEX_CORE_COMMAND_HOST, EDGEX_CORE_COMMAND_PORT
-# EDGEX_REGISTRY_HOST, EDGEX_REGISTRY_PORT
-# EDGEX_DATABASE_HOST, EDGEX_DATABASE_PORT
+# Security / Secure Mode configuration:
+# Secure Mode requires:
+# - SecretStore (OpenBao via core-keeper)
+# - Secure MessageBus (MQTT TLS with redisdb secret)
+# - TLS for HTTP endpoints
+# - JWT authentication for API endpoints
+# - API Gateway integration
+Security:
+  # SecureMode: true/false - enable/disable secure mode
+  # When true, service requires SecretStore, TLS certs, JWT auth, etc.
+  SecureMode: false
+  # TLS certificate and key files for HTTP server
+  SSLCertFile: ""
+  SSLKeyFile: ""
+  # SecretStore token file path (set by security-bootstrapper)
+  SecretStoreTokenFile: ""
+  # Vault/OpenBao address for SecretProvider
+  VaultAddr: ""
+  OpenBaoAddr: ""
+  # JWT configuration for API authentication
+  JwtJwksUrl: ""
+  JwtPublicKey: ""
+  JwtIssuer: ""
+  JwtAudience: ""
