@@ -44,12 +44,12 @@ secure mode (TLS, JWT, Secure MessageBus) must be supported.
 
 | Metric | Value |
 |--------|-------|
-| Total tests | 260 |
-| Test files | 12 |
-| Lines of test code | ~7,400 |
-| Commits | 14 |
+| Total tests | 367 |
+| Test files | 15 |
+| Lines of test code | ~8,700 |
+| Commits | 16 |
 | Milestones | 10 + G12/G13 + Secure Mode |
-| Overall coverage | 64% |
+| Overall coverage | 72% |
 
 ## Test Coverage (pytest-cov)
 
@@ -57,14 +57,14 @@ secure mode (TLS, JWT, Secure MessageBus) must be supported.
 |--------|----------|---------|
 | `service/device_service.py` | 52% | 578 lines |
 | `internal/application/command.py` | 51% | 202 lines |
-| `internal/autoevent/manager.py` | 31% | 70 lines |
-| `internal/autoevent/executor.py` | 17% | 123 lines |
+| `internal/autoevent/manager.py` | 92% | 8 lines |
+| `internal/autoevent/executor.py` | 95% | 7 lines |
 | `internal/controller/messaging/command.py` | 68% | 53 lines |
 | `internal/controller/messaging/validation.py` | 60% | 40 lines |
 | `internal/controller/messaging/callback.py` | 80% | 33 lines |
-| `internal/controller/messaging/client.py` | 44% | 133 lines |
-| `internal/metadata/dto.py` | 47% | 97 lines |
-| **Overall** | **64%** | 1939 lines |
+| `internal/controller/messaging/client.py` | 99% | 3 lines |
+| `internal/metadata/dto.py` | 100% | 0 lines |
+| **Overall** | **72%** | 1532 lines |
 
 ## Key Technical Decisions
 
@@ -82,7 +82,6 @@ secure mode (TLS, JWT, Secure MessageBus) must be supported.
 | Full message bus integration (validation subscription, command subscription) | Requires message bus infrastructure |
 | Consul config provider | Documented as extension, not in v4.0.0 scope |
 | DEVLOG calibration as formal ADR | Time-boxed to post-v4.0.0 |
-| Test coverage for `messaging/client.py`, `metadata/dto.py`, autoevent modules | Requires further mock infrastructure |
 
 ## Test Inventory
 
@@ -102,7 +101,10 @@ secure mode (TLS, JWT, Secure MessageBus) must be supported.
 | `test_autodiscovery.py` | 9 | Discovery locker/scheduler/bootstrap |
 | `test_extended_driver.py` | 8 | ExtendedProtocolDriver + ProfileScan DTO |
 | `test_messaging.py` | 54 | Command/validation/callback messaging |
-| **Total** | **260** | |
+| `test_metadata_dto.py` | 27 | Metadata serialization DTOs |
+| `test_messaging_client.py` | 45 | MessageEnvelope, MQTT client, CBOR/JSON |
+| `test_autoevent.py` | 35 | Duration parsing, on-change, manager scheduling |
+| **Total** | **367** | |
 
 ## Commit History
 
@@ -120,6 +122,8 @@ af4f6af feat: G8 public stop() method (M8)
 1b5024b test: add test_command_application.py + fix device DOWN validation
 [HEAD] feat: G12 progress topic format v4.0.2 + G13 _advertised_host fix
 [HEAD] feat: Secure Mode (OpenBao SecretProvider, JWT auth, readiness, ExtendedProtocolDriver, autodiscovery, ProfileScan DTO)
+[HEAD] fix: normalize Go/camelCase envelope keys when decoding CBOR messages
+[HEAD] test: metadata dto, messaging client, autoevent coverage (367 tests, 72% overall)
 ```
 
 ## Validation Commands
