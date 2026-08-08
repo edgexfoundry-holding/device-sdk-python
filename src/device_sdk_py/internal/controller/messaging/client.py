@@ -219,11 +219,28 @@ class MessageEnvelope:
         return MessageEnvelope(**data)
 
 
+_ENVELOPE_KEY_ALIASES = {
+    "apiversion": "api_version",
+    "requestid": "request_id",
+    "correlationid": "correlation_id",
+    "errorcode": "error_code",
+    "contenttype": "content_type",
+    "queryparams": "query_params",
+    "receivedtopic": "received_topic",
+    "payload": "payload",
+}
+
+
+def _normalize_envelope_data(data: dict) -> dict:
+    """Map Go/camelCase envelope keys (CBOR transport) to Python field names."""
+    return {_ENVELOPE_KEY_ALIASES.get(k.lower(), k): v for k, v in data.items()}
+
+
 def _decode_message_envelope(payload: bytes) -> MessageEnvelope:
     """Decode envelope from wire format (CBOR or JSON)."""
     # EdgeX v4 uses CBOR when ENV_MESSAGE_CBOR_ENCODE=true
     if os.getenv("EDGEX_MESSAGE_CBOR_ENCODE", "false").lower() == "true":
-        data = cbor2.loads(payload)
+        data = _normalize_envelope_data(cbor2.loads(payload))
         return MessageEnvelope(**data)
     # JSON path
     text = payload.decode("utf-8")
