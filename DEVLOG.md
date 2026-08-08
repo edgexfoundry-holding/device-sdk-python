@@ -44,24 +44,27 @@ secure mode (TLS, JWT, Secure MessageBus) must be supported.
 
 | Metric | Value |
 |--------|-------|
-| Total tests | 206 |
-| Test files | 11 |
-| Lines of test code | ~5,900 |
-| Commits | 13 |
+| Total tests | 260 |
+| Test files | 12 |
+| Lines of test code | ~7,400 |
+| Commits | 14 |
 | Milestones | 10 + G12/G13 + Secure Mode |
+| Overall coverage | 64% |
 
 ## Test Coverage (pytest-cov)
 
 | Module | Coverage | Missing |
 |--------|----------|---------|
-| `service/device_service.py` | 53% | 531 lines |
+| `service/device_service.py` | 52% | 578 lines |
 | `internal/application/command.py` | 51% | 202 lines |
 | `internal/autoevent/manager.py` | 31% | 70 lines |
 | `internal/autoevent/executor.py` | 17% | 123 lines |
-| `internal/controller/messaging/command.py` | 0% | 165 lines |
-| `internal/controller/messaging/validation.py` | 0% | 99 lines |
+| `internal/controller/messaging/command.py` | 68% | 53 lines |
+| `internal/controller/messaging/validation.py` | 60% | 40 lines |
+| `internal/controller/messaging/callback.py` | 80% | 33 lines |
 | `internal/controller/messaging/client.py` | 44% | 133 lines |
 | `internal/metadata/dto.py` | 47% | 97 lines |
+| **Overall** | **64%** | 1939 lines |
 
 ## Key Technical Decisions
 
@@ -79,7 +82,7 @@ secure mode (TLS, JWT, Secure MessageBus) must be supported.
 | Full message bus integration (validation subscription, command subscription) | Requires message bus infrastructure |
 | Consul config provider | Documented as extension, not in v4.0.0 scope |
 | DEVLOG calibration as formal ADR | Time-boxed to post-v4.0.0 |
-| Test coverage for messaging/callback modules | Requires message bus test infrastructure |
+| Test coverage for `messaging/client.py`, `metadata/dto.py`, autoevent modules | Requires further mock infrastructure |
 
 ## Test Inventory
 
@@ -98,7 +101,8 @@ secure mode (TLS, JWT, Secure MessageBus) must be supported.
 | `test_secure_mode.py` | 34 | JWT, Secret providers, readiness |
 | `test_autodiscovery.py` | 9 | Discovery locker/scheduler/bootstrap |
 | `test_extended_driver.py` | 8 | ExtendedProtocolDriver + ProfileScan DTO |
-| **Total** | **206** | |
+| `test_messaging.py` | 54 | Command/validation/callback messaging |
+| **Total** | **260** | |
 
 ## Commit History
 
