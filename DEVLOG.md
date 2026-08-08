@@ -87,24 +87,30 @@ secure mode (TLS, JWT, Secure MessageBus) must be supported.
 
 | Test File | Tests | Coverage |
 |-----------|-------|----------|
-| `test_bootstrap.py` | 22 | Bootstrap, CRUD, HTTP |
-| `test_metadata_writeback.py` | 52 | Metadata wire + write-back |
+| `test_bootstrap.py` | 8 | Bootstrap, CRUD, HTTP |
+| `test_metadata_writeback.py` | 30 | Metadata wire + write-back |
+| `test_device_service_metadata.py` | 61 | Device service runtime plumbing + write-back rollback |
 | `test_discovered_device.py` | 7 | Discovery registration |
 | `test_discovery_profile_scan.py` | 8 | Discovery/profile-scan endpoints |
 | `test_system_events.py` | 7 | Progress + generic events |
 | `test_config_watch.py` | 6 | File mtime polling |
-| `test_zero_dep_clients.py` | 15 | Logger/Secret/Metrics |
+| `test_zero_dep_clients.py` | 20 | Logger/Secret/Metrics |
 | `test_config_options.py` | 15 | Config option runtime |
 | `test_device_down.py` | 14 | Failure tracking + return loop |
 | `test_command_application.py` | 16 | Command read/write + validation |
+| `test_command_value.py` | 26 | CommandValue encode/decode |
+| `test_transformer.py` | 79 | Value transformer chains |
+| `test_metadata_client.py` | 29 | Metadata client HTTP + auth |
+| `test_metadata_dto.py` | 27 | Metadata serialization DTOs |
 | `test_secure_mode.py` | 34 | JWT, Secret providers, readiness |
 | `test_autodiscovery.py` | 9 | Discovery locker/scheduler/bootstrap |
 | `test_extended_driver.py` | 8 | ExtendedProtocolDriver + ProfileScan DTO |
 | `test_messaging.py` | 54 | Command/validation/callback messaging |
-| `test_metadata_dto.py` | 27 | Metadata serialization DTOs |
 | `test_messaging_client.py` | 45 | MessageEnvelope, MQTT client, CBOR/JSON |
 | `test_autoevent.py` | 35 | Duration parsing, on-change, manager scheduling |
-| **Total** | **367** | |
+| `test_public_stop.py` | 10 | Public `stop()` lifecycle |
+| `test_simple_example.py` | 14 | Example driver end-to-end |
+| **Total** | **562** | (79% overall coverage) |
 
 ## Commit History
 
@@ -124,6 +130,8 @@ af4f6af feat: G8 public stop() method (M8)
 [HEAD] feat: Secure Mode (OpenBao SecretProvider, JWT auth, readiness, ExtendedProtocolDriver, autodiscovery, ProfileScan DTO)
 [HEAD] fix: normalize Go/camelCase envelope keys when decoding CBOR messages
 [HEAD] test: metadata dto, messaging client, autoevent coverage (367 tests, 72% overall)
+e3b54e0 test: transformer, command_value, metadata client coverage (501 tests, 76% overall)
+[HEAD] test: device service metadata plumbing coverage (562 tests, 79% overall) + fix MessageBusConfig.publish_topic_prefix
 ```
 
 ## Validation Commands

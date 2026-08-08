@@ -83,8 +83,8 @@ class MessageBusConfig:
     optional: Dict[str, str] = field(default_factory=dict)
     # v4 additions
     base_topic_prefix: str = "edgex"
-publish_topic_prefix: str = "events" # "events" -> edgex/events/device/...
-subscribe_topics: List[str] = field(default_factory=list) # for App Services
+    publish_topic_prefix: str = "events"  # "events" -> edgex/events/device/...
+    subscribe_topics: List[str] = field(default_factory=list)  # for App Services
 
 
 class TlsConfigurationOptions:

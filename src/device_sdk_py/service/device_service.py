@@ -1063,6 +1063,8 @@ hostname IP. Extended Core services (core-command) reach this address to execute
                           service_name, ", ".join(known_secrets), ",".join(known_secrets))
 
     # -- internal helpers -------------------------------------------------------
+
+    def _device_labels(self) -> List[str]:
         """Return the Device labels from the configuration."""
         device = getattr(self.configuration, "device", None)
         labels = getattr(device, "labels", None) if device is not None else None
