@@ -827,6 +827,8 @@ def _parse_int_array(v: str, bits: int, value_type: str) -> List[int]:
     """Decode a signed integer array from JSON and enforce the element range (the Go
 `json.Unmarshal` into `[]int8` / `[]int16` /... rejects out-of-range numbers)."""
     arr = _json_array(v, value_type)
+    if not isinstance(arr, list):
+        raise _conversion_error(v, value_type)
     result: List[int] = []
     for item in arr:
         if isinstance(item, bool) or not isinstance(item, int):

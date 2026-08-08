@@ -98,6 +98,7 @@ secure mode (TLS, JWT, Secure MessageBus) must be supported.
 | `test_config_options.py` | 15 | Config option runtime |
 | `test_device_down.py` | 14 | Failure tracking + return loop |
 | `test_command_application.py` | 16 | Command read/write + validation |
+| `test_command_application_extended.py` | 63 | Coercion matrix, regex/command read-write paths (command.py 100%) |
 | `test_command_value.py` | 26 | CommandValue encode/decode |
 | `test_transformer.py` | 79 | Value transformer chains |
 | `test_metadata_client.py` | 29 | Metadata client HTTP + auth |
@@ -110,7 +111,7 @@ secure mode (TLS, JWT, Secure MessageBus) must be supported.
 | `test_autoevent.py` | 35 | Duration parsing, on-change, manager scheduling |
 | `test_public_stop.py` | 10 | Public `stop()` lifecycle |
 | `test_simple_example.py` | 14 | Example driver end-to-end |
-| **Total** | **562** | (79% overall coverage) |
+| **Total** | **625** | (83% overall coverage) |
 
 ## Commit History
 
@@ -131,7 +132,8 @@ af4f6af feat: G8 public stop() method (M8)
 [HEAD] fix: normalize Go/camelCase envelope keys when decoding CBOR messages
 [HEAD] test: metadata dto, messaging client, autoevent coverage (367 tests, 72% overall)
 e3b54e0 test: transformer, command_value, metadata client coverage (501 tests, 76% overall)
-[HEAD] test: device service metadata plumbing coverage (562 tests, 79% overall) + fix MessageBusConfig.publish_topic_prefix
+64a2cdc test: device service metadata plumbing coverage (562 tests, 79% overall) + fix MessageBusConfig.publish_topic_prefix
+[HEAD] test: command application extended coverage (625 tests, 83% overall, command.py 100%)
 ```
 
 ## Validation Commands
