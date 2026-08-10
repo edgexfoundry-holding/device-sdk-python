@@ -95,7 +95,7 @@ BYPASS_VALIDATION_QUERY_PARAM = "bypassValidation"
 # ---------------------------------------------------------------------------
 
 # Command request/response topics
-COMMAND_REQUEST_SUBSCRIBE_TOPIC = "command/request"
+COMMAND_REQUEST_SUBSCRIBE_TOPIC = "device/command/request"
 RESPONSE_TOPIC = "response"
 
 # Event publish topic
@@ -103,10 +103,12 @@ EVENTS_PUBLISH_TOPIC = "events"
 
 # System events topics
 SYSTEM_EVENTS_PUBLISH_TOPIC = "system-events"
+#: `<DeviceServiceName>/#` is appended (mirrors go-mod-core-contracts `MetadataSystemEventSubscribeTopic`)
+METADATA_SYSTEM_EVENT_SUBSCRIBE_TOPIC = "system-events/core-metadata/+/+"
 DEVICE_SYSTEM_EVENT_TYPE = "device"
-DEVICE_PROFILE_SYSTEM_EVENT_TYPE = "device-profile"
-PROVISION_WATCHER_SYSTEM_EVENT_TYPE = "provision-watcher"
-DEVICE_SERVICE_SYSTEM_EVENT_TYPE = "device-service"
+DEVICE_PROFILE_SYSTEM_EVENT_TYPE = "deviceprofile"
+PROVISION_WATCHER_SYSTEM_EVENT_TYPE = "provisionwatcher"
+DEVICE_SERVICE_SYSTEM_EVENT_TYPE = "deviceservice"
 
 # System event actions
 SYSTEM_EVENT_ACTION_ADD = "add"

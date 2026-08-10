@@ -15,14 +15,14 @@ Key files to port to Python:
 
 #### 1. MetadataSystemEventsCallback (callback.go)
 - Subscribes to 2-3 topics:
-  - `edgex/system-events/<svc>/#` (Device/Profile/DeviceService events)
-  - `edgex/system-events/device-profile/delete/#` (Profile Delete)
-  - Instance name: `edgex/system-events/provision-watcher/<baseSvc>/#`
+  - `edgex/system-events/core-metadata/+/+/<svc>/#` (Device/Profile/DeviceService events)
+  - `edgex/system-events/core-metadata/deviceprofile/delete/#` (Profile Delete)
+  - Instance name: `edgex/system-events/core-metadata/provisionwatcher/+/<baseSvc>/#`
 - Actions: Add/Update/Delete Device/ProvisionWatcher; Update/Delete DeviceProfile; Update DeviceService
 - Calls `application.AddDevice/UpdateDevice/DeleteDevice` etc.
 
 #### 2. SubscribeCommands (command.go)
-- Subscribes to `edgex/command/request/<svc>/#`
+- Subscribes to `edgex/device/command/request/<svc>/#`
 - Response publishes to `edgex/response/<svc>/<requestId>`
 - Concurrency: `defaultMaxConcurrentCommands = 32` semaphore
 - When full: reject with "service busy"

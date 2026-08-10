@@ -34,9 +34,9 @@ edgex/system-events/core-metadata/device/delete/device-virtual/Random-Boolean-De
 
 ## Relevance to Device Service SDK (Gap #6 in DEVLOG.md)
 Device Services must **subscribe** to these topics to keep their cache in sync with Core Metadata:
-- `edgex/system-events/<svc>/#` - Device/Profile/DeviceService events for this service
-- `edgex/system-events/device-profile/delete/#` - Profile delete (special)
-- Instance name scenario: `edgex/system-events/provision-watcher/<baseSvc>/#`
+- `edgex/system-events/core-metadata/+/+/<svc>/#` - Device/Profile/DeviceService events for this service
+- `edgex/system-events/core-metadata/deviceprofile/delete/#` - Profile delete (special)
+- Instance name scenario: `edgex/system-events/core-metadata/provisionwatcher/+/<baseSvc>/#`
 
 ### Actions to Handle:
 1. **Device**: Add/Update/Delete

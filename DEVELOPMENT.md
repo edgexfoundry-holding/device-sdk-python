@@ -128,11 +128,12 @@ def foo(bar: str) -> int:
 ### 4.1 Topic 规范（EdgeX v4）
 ```
 Events:      edgex/events/device/<svc>/<profile>/<device>/<source>
-Commands:    edgex/command/request/<svc>/<device>/<command>/<get|set>
+Commands:    edgex/device/command/request/<svc>/<device>/<command>/<get|set>
 Responses:   edgex/response/<svc>/<requestId>
-SysEvents:   edgex/system-events/<svc>/<type>/<action>
-             edgex/system-events/device-profile/delete/#
-             edgex/system-events/provision-watcher/<baseSvc>/#
+SysEvents:   edgex/system-events/<svc>/<type>/<action>/<svc>   (publish)
+             edgex/system-events/core-metadata/+/+/<svc>/#     (subscribe)
+             edgex/system-events/core-metadata/deviceprofile/delete/#
+             edgex/system-events/core-metadata/provisionwatcher/+/<baseSvc>/#
 Validation:  edgex/<svc>/validate/device
 ```
 - `<basePrefix>` 默认 `edgex`，可通过 `MessageBus.BaseTopicPrefix` 配置。

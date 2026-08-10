@@ -20,6 +20,7 @@ import cbor2
 
 from device_sdk_py.models import VALUETYPE_BINARY
 from device_sdk_py.internal.transformer.transform import Event, Reading
+from device_sdk_py.internal.clients.metrics import MetricsManager
 from device_sdk_py.internal.controller.messaging.client import (
     MessageClient,
     MessageEnvelope,
@@ -46,9 +47,9 @@ EVENTS_PUBLISH_TOPIC = "events"
 DEVICE_SERVICE_EVENT_PREFIX = "device"
 SYSTEM_EVENTS_PUBLISH_TOPIC = "system-events"
 DEVICE_SYSTEM_EVENT_TYPE = "device"
-DEVICE_PROFILE_SYSTEM_EVENT_TYPE = "device-profile"
-PROVISION_WATCHER_SYSTEM_EVENT_TYPE = "provision-watcher"
-DEVICE_SERVICE_SYSTEM_EVENT_TYPE = "device-service"
+DEVICE_PROFILE_SYSTEM_EVENT_TYPE = "deviceprofile"
+PROVISION_WATCHER_SYSTEM_EVENT_TYPE = "provisionwatcher"
+DEVICE_SERVICE_SYSTEM_EVENT_TYPE = "deviceservice"
 SYSTEM_EVENT_ACTION_ADD = "add"
 SYSTEM_EVENT_ACTION_UPDATE = "update"
 SYSTEM_EVENT_ACTION_DELETE = "delete"
@@ -89,19 +90,23 @@ def build_event_publish_topic(
 def build_system_event_publish_topic(
     base_topic_prefix: str,
     service_name: str,
-event_type: str, # device, device-profile, provision-watcher, device-service
-action: str, # add, update, delete, progress
+    event_type: str,  # device, deviceprofile, provisionwatcher, deviceservice
+    action: str,  # add, update, delete, progress
+    owner: Optional[str] = None,
 ) -> str:
     """
-    Build system event publish topic:
-    `<baseTopicPrefix>/system-events/<serviceName>/<eventType>/<action>`
+    Build system event publish topic (mirrors Go ``PublishGenericSystemEvent``):
+    `<baseTopicPrefix>/system-events/<source>/<eventType>/<action>/<owner>`
+    where source and owner default to the device service name.
     """
+    owner = owner or service_name
     parts = [
         base_topic_prefix.strip("/"),
         SYSTEM_EVENTS_PUBLISH_TOPIC,
         service_name,
         event_type,
         action,
+        owner,
     ]
     return "/".join(parts)
 
@@ -184,6 +189,7 @@ def publish_event(
     source_name: str,
     max_event_size: int = DEFAULT_MAX_EVENT_SIZE,
     logger: Optional[logging.Logger] = None,
+    metrics_manager: Optional[MetricsManager] = None,
 ) -> None:
     """
     Publish an Event to the EdgeX message bus.
@@ -194,6 +200,7 @@ def publish_event(
     - wraps in MessageEnvelope with correlation_id
     - enforces MaxEventSize
     - publishes via MessageClient
+    - mirrors Go ``SendEvent``: increments the EventsSent / ReadingsSent metrics
     """
     log = logger or logging.getLogger(__name__)
 
@@ -223,12 +230,17 @@ def publish_event(
 
     client.publish(envelope, topic)
 
+    # Go SendEvent increments these after a successful publish
+    if metrics_manager is not None:
+        metrics_manager.new_counter("EventsSent").inc(1)
+        metrics_manager.new_counter("ReadingsSent").inc(len(event.readings))
+
 
 def publish_system_event(
     client: MessageClient,
     service_name: str,
-event_type: str, # device, device-profile, provision-watcher, device-service
-action: str, # add, update, delete, progress
+    event_type: str,  # device, deviceprofile, provisionwatcher, deviceservice
+    action: str,  # add, update, delete, progress
     details: Any,
     correlation_id: Optional[str] = None,
     base_topic_prefix: str = "edgex",
@@ -237,8 +249,9 @@ action: str, # add, update, delete, progress
     """
     Publish a SystemEvent to the EdgeX message bus.
 
-    Topic: `<baseTopicPrefix>/system-events/<serviceName>/<eventType>/<action>`
-    Payload: SystemEvent DTO (v3).
+    Topic: `<baseTopicPrefix>/system-events/<serviceName>/<eventType>/<action>/<serviceName>`
+    Payload: SystemEvent DTO (v3), mirroring `go-mod-core-contracts` ``dtos.SystemEvent``
+    (`apiVersion`, `type`, `action`, `source`, `owner`, `tags`, `details`, `timestamp`).
     """
     log = logger or logging.getLogger(__name__)
 
@@ -246,16 +259,16 @@ action: str, # add, update, delete, progress
         base_topic_prefix, service_name, event_type, action
     )
 
-    # Build SystemEvent DTO
+    # Build SystemEvent DTO (mirrors Go `dtos.NewSystemEvent`: source = owner = service name)
     sys_event = {
         "apiVersion": "v3",
-        "eventId": str(uuid.uuid4()),
-"origin": int(1e9 * __import__("time").time()), # nanoseconds
-        "sourceName": service_name,
-        "owner": service_name,
         "type": event_type,
         "action": action,
+        "source": service_name,
+        "owner": service_name,
+        "tags": None,
         "details": details,
+        "timestamp": int(1e9 * __import__("time").time()),  # nanoseconds
     }
 
     payload_bytes = json.dumps(sys_event, separators=(",", ":")).encode("utf-8")

@@ -10,25 +10,29 @@ the topic ``<baseTopicPrefix>/<serviceName>/validate/device`` and waits for a re
 request times out and Core Metadata returns HTTP 503 "request timeout" for the device
 create/update call.
 
-This module subscribes to that topic, invokes the ProtocolDriver's ``validate_device`` and
-publishes the validation result back - validation.go`` loop. The wire
-format is a ``MessageEnvelope`` JSON object with an inline JSON ``payload`` (the
-``AddDeviceRequest``) and the response envelope carries an empty payload and ``errorCode=0``.
-
-The MQTT transport uses ``paho-mqtt`` (already a project dependency), mirroring the
-app-functions-sdk-python ``messaging/mqtt/client.py`` behaviour.
+This module subscribes to that topic using the shared ``MessageClient`` (so auth / TLS
+configuration is honoured), invokes the ProtocolDriver's ``validate_device`` and publishes
+the validation result back - mirroring the Go ``validation.go`` loop. The wire format is a
+``MessageEnvelope`` JSON object with an inline JSON ``payload`` (the ``AddDeviceRequest``);
+the success response envelope carries an empty payload and ``errorCode=0``, the error
+response carries ``errorCode=1`` with the error message as a ``text/plain`` payload.
 """
 
 from __future__ import annotations
 
-import json
 import logging
+import queue
 import threading
 from typing import Any, Optional
 
-import paho.mqtt.client as mqtt
-
 from ...provision import _build_device
+from ...controller.messaging.client import (
+    MessageClient,
+    MessageEnvelope,
+    TopicMessageQueue,
+    CONTENT_TYPE_JSON,
+    CONTENT_TYPE_TEXT,
+)
 
 __all__ = ["DeviceValidationHandler", "subscribe_device_validation"]
 
@@ -42,21 +46,18 @@ class DeviceValidationHandler:
         service_name: The name of this Device Service (topic namespace segment).
         driver: The ProtocolDriver whose ``validate_device`` is invoked for each request.
         base_topic_prefix: The EdgeX base topic prefix (default ``edgex``).
-        broker_host: The MQTT broker host.
-        broker_port: The MQTT broker port.
+        client: The connected MessageClient used to subscribe / publish.
         logger: Optional logger; defaults to the module logger.
     """
 
     def __init__(self, service_name: str, driver: Any, base_topic_prefix: str = "edgex",
-                 broker_host: str = "127.0.0.1", broker_port: int = 1883,
+                 client: Optional[MessageClient] = None,
                  logger: Optional[logging.Logger] = None) -> None:
         self.service_name = service_name
         self.driver = driver
         self.base_topic_prefix = base_topic_prefix.strip("/")
-        self.broker_host = broker_host
-        self.broker_port = int(broker_port)
+        self._client: Optional[MessageClient] = client
         self._logger = logger or _LOGGER
-        self._client: Optional[mqtt.Client] = None
         self._thread: Optional[threading.Thread] = None
         self._stop_event = threading.Event()
 
@@ -68,7 +69,7 @@ class DeviceValidationHandler:
         return f"{self.base_topic_prefix}/response/{self.service_name}/{request_id}"
 
     def start(self) -> None:
-        """Connect to the broker and subscribe to the validation topic in a background thread."""
+        """Subscribe to the validation topic and process requests in a background thread."""
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop_event.clear()
@@ -77,109 +78,108 @@ class DeviceValidationHandler:
         self._thread.start()
 
     def stop(self) -> None:
-        """Stop the subscriber thread and disconnect from the broker."""
+        """Stop the subscriber thread and unsubscribe from the validation topic."""
         self._stop_event.set()
         if self._client is not None:
             try:
-                self._client.disconnect()
-                self._client.loop_stop()
+                self._client.unsubscribe([self.request_topic])
             except Exception:  # noqa: BLE001
                 pass
         if self._thread is not None:
             self._thread.join(timeout=2.0)
 
     def _run(self) -> None:
-        self._client = mqtt.Client(
-            mqtt.CallbackAPIVersion.VERSION2,
-            client_id=f"device-validation-{self.service_name}",
-            clean_session=True,
-            reconnect_on_failure=True)
-        self._client.on_connect = self._on_connect
-        self._client.on_message = self._on_message
+        if self._client is None:
+            return
+        msg_queue: "queue.Queue[MessageEnvelope]" = queue.Queue()
+        err_queue: "queue.Queue[str]" = queue.Queue()
         try:
-            self._client.connect(self.broker_host, self.broker_port, keepalive=60)
-            self._client.loop_start()
+            self._client.subscribe(
+                [TopicMessageQueue(self.request_topic, msg_queue)], err_queue)
         except Exception as exc:  # noqa: BLE001
-            self._logger.warning("failed to connect to MQTT broker %s:%s for device "
-                                 "validation: %s", self.broker_host, self.broker_port, exc)
+            self._logger.warning("failed to subscribe to device validation topic %s: %s",
+                                 self.request_topic, exc)
             return
         self._logger.info("Subscribed to device validation requests on topic: %s",
                           self.request_topic)
-        while not self._stop_event.wait(timeout=0.5):
-            pass
-        try:
-            self._client.loop_stop()
-            self._client.disconnect()
-        except Exception:  # noqa: BLE001
-            pass
+        while not self._stop_event.is_set():
+            try:
+                err = err_queue.get_nowait()
+                self._logger.error("Device validation subscription error: %s", err)
+            except queue.Empty:
+                pass
+            try:
+                envelope = msg_queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            try:
+                self._process_envelope(envelope)
+            except Exception as exc:  # noqa: BLE001
+                self._logger.exception(
+                    "Unexpected error handling device validation request: %s", exc)
 
-    def _on_connect(self, client: mqtt.Client, userdata: Any,
-                    flags: dict, reason_code: Any, properties: Any = None) -> None:
-        if reason_code == 0 or int(reason_code) == 0:
-            client.subscribe(self.request_topic, qos=0)
-            self._logger.debug("subscribed to %s", self.request_topic)
-        else:
-            self._logger.warning("MQTT connect failed: %s", reason_code)
-
-    def _on_message(self, client: mqtt.Client, userdata: Any, message: mqtt.MQTTMessage) -> None:
-        self._logger.debug("Device validation request received on topic: %s", message.topic)
-        try:
-            envelope = json.loads(message.payload.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError) as exc:
-            self._logger.error("failed to decode validation request envelope: %s", exc)
-            return
-
-        request_id = envelope.get("requestID", "")
-        correlation_id = envelope.get("correlationID", "")
-        payload = envelope.get("payload")
+    def _process_envelope(self, envelope: MessageEnvelope) -> None:
+        self._logger.debug("Device validation request received on topic: %s",
+                           envelope.received_topic)
+        request_id = envelope.request_id
+        correlation_id = envelope.correlation_id
+        payload = envelope.payload
         try:
             device_dto = payload.get("device") if isinstance(payload, dict) else None
             if device_dto is None:
                 raise ValueError("payload is not an AddDeviceRequest")
             device = _build_device(device_dto)
             self.driver.validate_device(device)
-        except Exception as exc: # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             self._logger.error("Device validation failed: %s", exc)
-            self._publish_response(request_id, correlation_id, error_code=str(exc))
+            self._publish_response(request_id, correlation_id, error_msg=str(exc))
             return
 
-        self._publish_response(request_id, correlation_id, error_code="")
+        self._publish_response(request_id, correlation_id)
         self._logger.debug("Device validation response published for request %s", request_id)
 
     def _publish_response(self, request_id: str, correlation_id: str,
-                          error_code: str = "") -> None:
+                          error_msg: str = "") -> None:
         """Publish a validation result envelope.
 
-        Mirrors ``NewMessageEnvelopeWithError``.
+        Mirrors ``NewMessageEnvelopeForResponse`` (success, empty payload) and
+        ``NewMessageEnvelopeWithError`` (errorCode=1, text/plain error payload).
         """
         if self._client is None or not request_id:
             return
-        envelope = {
-            "apiVersion": "v3",
-            "receivedTopic": "",
-            "correlationID": correlation_id,
-            "requestID": request_id,
-            "errorCode": error_code if error_code else 0,
-            "payload": "",
-            "contentType": "application/json",
-        }
+        if error_msg:
+            envelope = MessageEnvelope(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                error_code=1,
+                payload=error_msg,
+                content_type=CONTENT_TYPE_TEXT,
+            )
+        else:
+            envelope = MessageEnvelope(
+                correlation_id=correlation_id,
+                request_id=request_id,
+                error_code=0,
+                payload=None,
+                content_type=CONTENT_TYPE_JSON,
+            )
         topic = self._response_topic(request_id)
         try:
-            self._client.publish(topic, json.dumps(envelope), qos=0)
-        except Exception as exc: # noqa: BLE001
+            self._client.publish(envelope, topic)
+        except Exception as exc:  # noqa: BLE001
             self._logger.error("failed to publish device validation response to %s: %s",
                                topic, exc)
 
 
 def subscribe_device_validation(service_name: str, driver: Any,
                                 base_topic_prefix: str = "edgex",
-                                broker_host: str = "127.0.0.1", broker_port: int = 1883,
+                                client: Optional[MessageClient] = None,
                                 logger: Optional[logging.Logger] = None) -> DeviceValidationHandler:
     """Create and start a `DeviceValidationHandler` (Python counterpart of Go
     ``messaging.SubscribeDeviceValidation``)."""
     handler = DeviceValidationHandler(
         service_name=service_name, driver=driver,
         base_topic_prefix=base_topic_prefix,
-        broker_host=broker_host, broker_port=broker_port, logger=logger)
+        client=client, logger=logger)
     handler.start()
     return handler

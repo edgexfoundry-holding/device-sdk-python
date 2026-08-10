@@ -15,8 +15,8 @@ metadata system events callback, auto-events, discovery, and provision watchers.
 
 - **REST API** (EdgeX v3): `/api/v3/ping`, `version`, `config`, `metrics`, `device/name/{name}/{command}` (GET/PUT), `discovery`, `profilescan`
 - **MessageBus Publishing**: Events → `edgex/events/device/<svc>/<profile>/<device>/<source>` (JSON/CBOR, MaxEventSize)
-- **Command Subscription**: MQTT `edgex/command/request/<svc>/#` → semaphore-limited (default 32) → response on `edgex/response/<svc>/<reqId>`
-- **Metadata System Events**: Subscribes to `edgex/system-events/<svc>/#`, `device-profile/delete/#`; dispatches Device/Profile/Watcher/Service CRUD
+- **Command Subscription**: MQTT `edgex/device/command/request/<svc>/#` → semaphore-limited (default 32) → response on `edgex/response/<svc>/<reqId>`
+- **Metadata System Events**: Subscribes to `edgex/system-events/core-metadata/+/+/<svc>/#`, `core-metadata/deviceprofile/delete/#`, provision-watcher topics; dispatches Device/Profile/Watcher/Service CRUD
 - **Async Readings Pump**: Consumes `AsyncValues` channel → transforms → publishes
 - **Discovery Pump**: Consumes discovered devices → matches ProvisionWatchers → registers
 - **Data Transformations**: Mask → Shift → Base → Scale → Offset (read); inverse (write)
@@ -205,10 +205,11 @@ bootstrap(
 | Purpose | Topic Pattern |
 |---------|---------------|
 | Event Publish | `edgex/events/device/<svc>/<profile>/<device>/<source>` |
-| Command Request | `edgex/command/request/<svc>/<device>/<command>/<get\|set>` |
+| Command Request | `edgex/device/command/request/<svc>/<device>/<command>/<get\|set>` |
 | Command Response | `edgex/response/<svc>/<requestId>` |
-| System Events | `edgex/system-events/<svc>/<type>/<action>` |
-| Profile Delete | `edgex/system-events/device-profile/delete/#` |
+| System Events (publish) | `edgex/system-events/<svc>/<type>/<action>/<svc>` |
+| Metadata System Events (subscribe) | `edgex/system-events/core-metadata/+/+/<svc>/#` |
+| Profile Delete | `edgex/system-events/core-metadata/deviceprofile/delete/#` |
 | Validation | `edgex/<svc>/validate/device` |
 
 ## Testing

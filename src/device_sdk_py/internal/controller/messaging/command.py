@@ -3,7 +3,7 @@
 """
 `device-sdk-go/internal/controller/messaging/command.go` (`SubscribeCommands`).
 
-Subscribes to `<basePrefix>/command/request/<serviceName>/#`, parses device/command/method
+Subscribes to `<basePrefix>/device/command/request/<serviceName>/#`, parses device/command/method
 from the topic, enforces a semaphore (default 32 concurrent), invokes
 `application.command_read` / `application.command_write`, publishes response to
 `<basePrefix>/response/<serviceName>/<requestId>`, and optionally re-publishes the
@@ -12,6 +12,7 @@ Event via `send_event` when `ds-pushevent=true`.
 
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import urllib.parse
@@ -23,6 +24,8 @@ from device_sdk_py.internal.controller.messaging.client import (
     MessageEnvelope,
     TopicMessageQueue,
     CONTENT_TYPE_JSON,
+    CONTENT_TYPE_TEXT,
+    unmarshal_payload,
 )
 from device_sdk_py.internal.controller.messaging.publish import (
     build_event_publish_topic,
@@ -55,7 +58,7 @@ def _parse_command_topic(
     """
     Parse the command request topic to extract device name, command name, and method.
 
-    Expected topic format: `<basePrefix>/command/request/<serviceName>/<deviceName>/<commandName>/<method>`
+    Expected topic format: `<basePrefix>/device/command/request/<serviceName>/<deviceName>/<commandName>/<method>`
     """
     prefix = f"{base_topic_prefix}/{COMMAND_REQUEST_SUBSCRIBE_TOPIC}/{service_name}/"
     if not topic.startswith(prefix):
@@ -159,14 +162,15 @@ def subscribe_commands(
         correlation_id: str,
         error_msg: str,
         response_topic: str,
-        encoding: str = CONTENT_TYPE_JSON,
     ) -> None:
-        """Publish an error response envelope."""
+        """Publish an error response envelope (mirrors Go ``NewMessageEnvelopeWithError``:
+        errorCode=1, payload carries the error message, contentType text/plain)."""
         env = MessageEnvelope(
             correlation_id=correlation_id,
             request_id=request_id,
-            content_type=encoding,
-            payload={"apiVersion": "v3", "errorCode": 500, "message": error_msg},
+            error_code=1,
+            payload=error_msg,
+            content_type=CONTENT_TYPE_TEXT,
         )
         try:
             client.publish(env, response_topic)
@@ -261,9 +265,12 @@ def subscribe_commands(
                         try:
                             # Read MaxEventSize from device service configuration
                             max_event_size = 0
+                            metrics_manager = None
                             if device_service is not None and hasattr(device_service, "configuration"):
                                 device_opt = getattr(device_service.configuration, "device", None)
                                 max_event_size = getattr(device_opt, "max_event_size", 0) if device_opt else 0
+                                mm = getattr(device_service, "metrics_manager", None)
+                                metrics_manager = mm() if callable(mm) else mm
                             publish_event(
                                 client=client,
                                 event=event,
@@ -275,6 +282,7 @@ def subscribe_commands(
                                 source_name=event.source_name,
                                 max_event_size=max_event_size,
                                 logger=log,
+                                metrics_manager=metrics_manager,
                             )
                         except Exception as exc:
                             log.error("Failed to publish event via ds-pushevent: %s", exc)
@@ -282,6 +290,17 @@ def subscribe_commands(
                 else:
                     # SET command
                     request_payload = envelope.payload
+                    if isinstance(request_payload, bytes):
+                        try:
+                            request_payload = unmarshal_payload(
+                                envelope.content_type, request_payload, dict)
+                        except ValueError:
+                            request_payload = None
+                    elif isinstance(request_payload, str):
+                        try:
+                            request_payload = json.loads(request_payload)
+                        except ValueError:
+                            request_payload = None
                     if not isinstance(request_payload, dict):
                         log.error("Invalid set command payload: not a dict")
                         _publish_error_response(envelope.request_id, correlation_id,
@@ -325,9 +344,12 @@ def subscribe_commands(
                         try:
                             # Read MaxEventSize from device service configuration
                             max_event_size = 0
+                            metrics_manager = None
                             if device_service is not None and hasattr(device_service, "configuration"):
                                 device_opt = getattr(device_service.configuration, "device", None)
                                 max_event_size = getattr(device_opt, "max_event_size", 0) if device_opt else 0
+                                mm = getattr(device_service, "metrics_manager", None)
+                                metrics_manager = mm() if callable(mm) else mm
                             publish_event(
                                 client=client,
                                 event=event,
@@ -339,6 +361,7 @@ def subscribe_commands(
                                 source_name=event.source_name,
                                 max_event_size=max_event_size,
                                 logger=log,
+                                metrics_manager=metrics_manager,
                             )
                         except Exception as exc:
                             log.error("Failed to publish event after set command: %s", exc)

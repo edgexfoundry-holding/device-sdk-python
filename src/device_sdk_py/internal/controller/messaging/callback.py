@@ -9,10 +9,10 @@ Subscribes to system event topics and dispatches to the appropriate handler:
 - ProvisionWatcher add/update/delete
 - DeviceService update
 
-Topics (per EdgeX v4):
-- `<basePrefix>/system-events/<serviceName>/#` (Device, DeviceProfile, DeviceService)
-- `<basePrefix>/system-events/device-profile/delete/#` (Profile delete special)
-- Instance name scenario: `<basePrefix>/system-events/provision-watcher/<baseServiceName>/#`
+Topics (per EdgeX v4, mirrors `MetadataSystemEventsCallback`):
+- `<basePrefix>/system-events/core-metadata/+/+/<serviceName>/#` (Device, DeviceProfile, DeviceService)
+- `<basePrefix>/system-events/core-metadata/deviceprofile/delete/#` (Profile delete special)
+- Instance name scenario: `<basePrefix>/system-events/core-metadata/provisionwatcher/+/<baseServiceName>/#`
 """
 
 from __future__ import annotations
@@ -34,8 +34,8 @@ from device_sdk_py.internal.common.consts import (
     SYSTEM_EVENT_ACTION_ADD,
     SYSTEM_EVENT_ACTION_UPDATE,
     SYSTEM_EVENT_ACTION_DELETE,
-    SYSTEM_EVENT_ACTION_PROGRESS,
     SYSTEM_EVENTS_PUBLISH_TOPIC,
+    METADATA_SYSTEM_EVENT_SUBSCRIBE_TOPIC,
     CORE_METADATA_SERVICE_KEY,
 )
 from device_sdk_py.internal.common.utils import EdgexError
@@ -235,21 +235,30 @@ base_service_name: Optional[str], # service name without instance suffix
     # Build subscription topics
     topics: List[TopicMessageQueue] = []
 
-    # Main system events topic: <basePrefix>/system-events/<serviceName>/#
-    main_topic = f"{base_topic_prefix}/{SYSTEM_EVENTS_PUBLISH_TOPIC}/{service_name}/#"
+    # Main system events topic:
+    # <basePrefix>/system-events/core-metadata/+/+/<serviceName>/#
+    main_topic = f"{base_topic_prefix}/{METADATA_SYSTEM_EVENT_SUBSCRIBE_TOPIC}/{service_name}/#"
     topics.append(TopicMessageQueue(topic=main_topic,
                                  message_queue=__import__("queue").Queue(maxsize=_MAX_SYSTEM_EVENTS_QUEUE)))
     log.info("Subscribing to system events on topic: %s", main_topic)
 
-    # Profile delete special topic: <basePrefix>/system-events/device-profile/delete/#
-    profile_delete_topic = f"{base_topic_prefix}/{SYSTEM_EVENTS_PUBLISH_TOPIC}/{DEVICE_PROFILE_SYSTEM_EVENT_TYPE}/{SYSTEM_EVENT_ACTION_DELETE}/#"
+    # Profile delete special topic:
+    # <basePrefix>/system-events/core-metadata/deviceprofile/delete/#
+    profile_delete_topic = (
+        f"{base_topic_prefix}/{SYSTEM_EVENTS_PUBLISH_TOPIC}/core-metadata/"
+        f"{DEVICE_PROFILE_SYSTEM_EVENT_TYPE}/{SYSTEM_EVENT_ACTION_DELETE}/#"
+    )
     topics.append(TopicMessageQueue(topic=profile_delete_topic,
                                  message_queue=__import__("queue").Queue(maxsize=_MAX_SYSTEM_EVENTS_QUEUE)))
     log.info("Subscribing to profile delete events on topic: %s", profile_delete_topic)
 
-    # Instance name scenario: provision watcher topic uses base service name
+    # Instance name scenario: provision watcher topic uses base service name.
+    # <basePrefix>/system-events/core-metadata/provisionwatcher/+/<baseServiceName>/#
     if base_service_name and base_service_name != service_name:
-        pw_topic = f"{base_topic_prefix}/{SYSTEM_EVENTS_PUBLISH_TOPIC}/{PROVISION_WATCHER_SYSTEM_EVENT_TYPE}/{base_service_name}/#"
+        pw_topic = (
+            f"{base_topic_prefix}/{SYSTEM_EVENTS_PUBLISH_TOPIC}/core-metadata/"
+            f"{PROVISION_WATCHER_SYSTEM_EVENT_TYPE}/+/{base_service_name}/#"
+        )
         topics.append(TopicMessageQueue(topic=pw_topic,
                                  message_queue=__import__("queue").Queue(maxsize=_MAX_SYSTEM_EVENTS_QUEUE)))
         log.info("Subscribing to provision watcher events on topic: %s", pw_topic)

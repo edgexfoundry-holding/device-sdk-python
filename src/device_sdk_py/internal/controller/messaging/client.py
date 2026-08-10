@@ -28,6 +28,7 @@ from paho.mqtt.enums import CallbackAPIVersion
 # Content type constants (mirrors app-functions-sdk-python)
 CONTENT_TYPE_JSON = "application/json"
 CONTENT_TYPE_CBOR = "application/cbor"
+CONTENT_TYPE_TEXT = "text/plain"
 
 # Default message bus values
 DEFAULT_MESSAGEBUS_PROTOCOL = "tcp"
@@ -200,17 +201,23 @@ class MessageEnvelope:
     api_version: str = "v3"
 
     def to_json(self) -> str:
-        """Serialize to JSON for publishing (payload base64 if bytes)."""
-        data = asdict(self)
-        # payload bytes -> base64 string for JSON transport
-        if isinstance(data["payload"], bytes):
-            data["payload"] = base64.b64encode(data["payload"]).decode("ascii")
+        """Serialize to JSON for publishing (Go/camelCase keys, payload base64 if bytes)."""
+        data = {}
+        for field, value in asdict(self).items():
+            key = _ENVELOPE_TO_JSON_KEYS.get(field, field)
+            # Go marshals queryParams with omitempty
+            if key == "queryParams" and not value:
+                continue
+            # payload bytes -> base64 string for JSON transport
+            if key == "payload" and isinstance(value, bytes):
+                value = base64.b64encode(value).decode("ascii")
+            data[key] = value
         return json.dumps(data)
 
     @staticmethod
     def from_json(text: str) -> "MessageEnvelope":
-        """Deserialize from JSON (base64 payload -> bytes)."""
-        data = json.loads(text)
+        """Deserialize from JSON (camelCase or snake_case keys, base64 payload -> bytes)."""
+        data = _normalize_envelope_data(json.loads(text))
         if isinstance(data.get("payload"), str):
             try:
                 data["payload"] = base64.b64decode(data["payload"])
@@ -228,6 +235,17 @@ _ENVELOPE_KEY_ALIASES = {
     "queryparams": "query_params",
     "receivedtopic": "received_topic",
     "payload": "payload",
+}
+
+_ENVELOPE_TO_JSON_KEYS = {
+    "api_version": "apiVersion",
+    "received_topic": "receivedTopic",
+    "correlation_id": "correlationID",
+    "request_id": "requestID",
+    "error_code": "errorCode",
+    "payload": "payload",
+    "content_type": "contentType",
+    "query_params": "queryParams",
 }
 
 

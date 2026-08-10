@@ -80,7 +80,7 @@ class TestParseCommandTopic(unittest.TestCase):
 
     def test_valid_get_topic(self):
         parsed = _parse_command_topic(
-            "edgex/command/request/device-simple/sensor-01/temperature/GET",
+            "edgex/device/command/request/device-simple/sensor-01/temperature/GET",
             "edgex", "device-simple",
         )
         self.assertEqual(parsed["device_name"], "sensor-01")
@@ -89,14 +89,14 @@ class TestParseCommandTopic(unittest.TestCase):
 
     def test_valid_set_topic(self):
         parsed = _parse_command_topic(
-            "edgex/command/request/device-simple/sensor-01/power/SET",
+            "edgex/device/command/request/device-simple/sensor-01/power/SET",
             "edgex", "device-simple",
         )
         self.assertEqual(parsed["method"], "SET")
 
     def test_url_encoded_segments(self):
         parsed = _parse_command_topic(
-            "edgex/command/request/device-simple/my%20device/on%2Foff/GET",
+            "edgex/device/command/request/device-simple/my%20device/on%2Foff/GET",
             "edgex", "device-simple",
         )
         self.assertEqual(parsed["device_name"], "my device")
@@ -108,15 +108,15 @@ class TestParseCommandTopic(unittest.TestCase):
 
     def test_wrong_service_returns_none(self):
         self.assertIsNone(_parse_command_topic(
-            "edgex/command/request/other-service/x/y/GET", "edgex", "device-simple"))
+            "edgex/device/command/request/other-service/x/y/GET", "edgex", "device-simple"))
 
     def test_too_few_segments_returns_none(self):
         self.assertIsNone(_parse_command_topic(
-            "edgex/command/request/device-simple/x/y", "edgex", "device-simple"))
+            "edgex/device/command/request/device-simple/x/y", "edgex", "device-simple"))
 
     def test_unsupported_method_returns_none(self):
         self.assertIsNone(_parse_command_topic(
-            "edgex/command/request/device-simple/x/y/POST", "edgex", "device-simple"))
+            "edgex/device/command/request/device-simple/x/y/POST", "edgex", "device-simple"))
 
 
 class TestBuildResponseTopic(unittest.TestCase):
@@ -164,7 +164,7 @@ class TestFilterQueryParams(unittest.TestCase):
 class TestSubscribeCommands(unittest.TestCase):
     """Integration-style test of the command subscription thread."""
 
-    def _make_env(self, topic="edgex/command/request/device-simple/sensor-01/temperature/GET",
+    def _make_env(self, topic="edgex/device/command/request/device-simple/sensor-01/temperature/GET",
                   request_id="req-1", query_params=None):
         return MessageEnvelope(
             received_topic=topic,
@@ -196,7 +196,7 @@ class TestSubscribeCommands(unittest.TestCase):
             configuration=config, device_service=mock.Mock(), logger=logging.getLogger("t"),
         )
         self.assertTrue(thread.is_alive())
-        self.assertIn("edgex/command/request/device-simple/#", client.subscribed_topics)
+        self.assertIn("edgex/device/command/request/device-simple/#", client.subscribed_topics)
         cancel.set()
         thread.join(timeout=2.0)
 
@@ -217,7 +217,7 @@ class TestSubscribeCommands(unittest.TestCase):
                 configuration=config, device_service=mock.Mock(),
                 logger=logging.getLogger("t"),
             )
-            q = client.get_queue_for("edgex/command/request/device-simple/")
+            q = client.get_queue_for("edgex/device/command/request/device-simple/")
             self.assertIsNotNone(q)
             q.put(self._make_env())
             self._drain(client)
@@ -233,7 +233,7 @@ class TestSubscribeCommands(unittest.TestCase):
     def test_set_command_publishes_response(self):
         client, cancel, config = self._make_context()
         env = self._make_env(
-            topic="edgex/command/request/device-simple/sensor-01/power/SET",
+            topic="edgex/device/command/request/device-simple/sensor-01/power/SET",
             request_id="req-2",
         )
         env.payload = {"power": "on"}
@@ -245,7 +245,7 @@ class TestSubscribeCommands(unittest.TestCase):
                 configuration=config, device_service=mock.Mock(),
                 logger=logging.getLogger("t"),
             )
-            q = client.get_queue_for("edgex/command/request/device-simple/")
+            q = client.get_queue_for("edgex/device/command/request/device-simple/")
             q.put(env)
             self._drain(client)
             self.assertTrue(client.published)
@@ -261,7 +261,7 @@ class TestSubscribeCommands(unittest.TestCase):
             cancel, client, "edgex", "device-simple", driver=mock.Mock(),
             configuration=config, device_service=mock.Mock(), logger=logging.getLogger("t"),
         )
-        q = client.get_queue_for("edgex/command/request/device-simple/")
+        q = client.get_queue_for("edgex/device/command/request/device-simple/")
         q.put(self._make_env(topic="edgex/wrong/topic"))
         time.sleep(0.1)
         self.assertEqual(client.published, [])
@@ -273,7 +273,7 @@ class TestSubscribeCommands(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class TestDeviceValidationHandler(unittest.TestCase):
-    """Test the MQTT device validation handler."""
+    """Test the message-bus device validation handler."""
 
     def setUp(self):
         self.driver = mock.Mock()
@@ -296,20 +296,22 @@ class TestDeviceValidationHandler(unittest.TestCase):
     def test_publish_response_success(self):
         client = mock.Mock()
         self.handler._client = client
-        self.handler._publish_response("req-1", "corr-1", error_code="")
-        topic, payload, kwargs = client.publish.call_args[0][0], client.publish.call_args[0][1], client.publish.call_args[1]
+        self.handler._publish_response("req-1", "corr-1")
+        env, topic = client.publish.call_args[0]
         self.assertEqual(topic, "edgex/response/device-simple/req-1")
-        data = json.loads(payload)
-        self.assertEqual(data["errorCode"], 0)
-        self.assertEqual(data["requestID"], "req-1")
-        self.assertEqual(kwargs["qos"], 0)
+        self.assertEqual(env.error_code, 0)
+        self.assertIsNone(env.payload)
+        self.assertEqual(env.content_type, "application/json")
+        self.assertEqual(env.request_id, "req-1")
 
     def test_publish_response_with_error(self):
         client = mock.Mock()
         self.handler._client = client
-        self.handler._publish_response("req-1", "corr-1", error_code="boom")
-        data = json.loads(client.publish.call_args[0][1])
-        self.assertEqual(data["errorCode"], "boom")
+        self.handler._publish_response("req-1", "corr-1", error_msg="boom")
+        env, topic = client.publish.call_args[0]
+        self.assertEqual(env.error_code, 1)
+        self.assertEqual(env.payload, "boom")
+        self.assertEqual(env.content_type, "text/plain")
 
     def test_publish_response_noop_without_request_id(self):
         client = mock.Mock()
@@ -317,60 +319,56 @@ class TestDeviceValidationHandler(unittest.TestCase):
         self.handler._publish_response("", "corr-1")
         client.publish.assert_not_called()
 
-    def test_on_message_valid_device(self):
-        envelope = {
-            "requestID": "req-1",
-            "correlationID": "corr-1",
-            "payload": {"device": {"name": "sensor-01", "adminState": "UNLOCKED"}},
-        }
-        msg = mock.Mock()
-        msg.payload = json.dumps(envelope).encode("utf-8")
-        msg.topic = self.handler.request_topic
+    def test_process_envelope_valid_device(self):
+        env = MessageEnvelope(
+            request_id="req-1",
+            correlation_id="corr-1",
+            payload={"device": {"name": "sensor-01", "adminState": "UNLOCKED"}},
+        )
         client = mock.Mock()
         self.handler._client = client
 
         with mock.patch("device_sdk_py.internal.controller.messaging.validation._build_device") as build:
             device = mock.Mock()
             build.return_value = device
-            self.handler._on_message(client, None, msg)
+            self.handler._process_envelope(env)
 
         self.driver.validate_device.assert_called_once_with(device)
         client.publish.assert_called_once()
-        data = json.loads(client.publish.call_args[0][1])
-        self.assertEqual(data["errorCode"], 0)
+        env2, _ = client.publish.call_args[0]
+        self.assertEqual(env2.error_code, 0)
 
-    def test_on_message_validation_failure_publishes_error(self):
-        envelope = {
-            "requestID": "req-2",
-            "correlationID": "corr-2",
-            "payload": {"device": {"name": "bad"}},
-        }
-        msg = mock.Mock()
-        msg.payload = json.dumps(envelope).encode("utf-8")
+    def test_process_envelope_validation_failure_publishes_error(self):
+        env = MessageEnvelope(
+            request_id="req-2",
+            correlation_id="corr-2",
+            payload={"device": {"name": "bad"}},
+        )
         client = mock.Mock()
         self.handler._client = client
 
         self.driver.validate_device.side_effect = RuntimeError("bad protocols")
         with mock.patch("device_sdk_py.internal.controller.messaging.validation._build_device") as build:
             build.return_value = mock.Mock()
-            self.handler._on_message(client, None, msg)
+            self.handler._process_envelope(env)
 
-        data = json.loads(client.publish.call_args[0][1])
-        self.assertEqual(data["errorCode"], "bad protocols")
+        env2, _ = client.publish.call_args[0]
+        self.assertEqual(env2.error_code, 1)
+        self.assertEqual(env2.payload, "bad protocols")
 
-    def test_on_message_missing_payload(self):
-        msg = mock.Mock()
-        msg.payload = json.dumps({"requestID": "r", "payload": None}).encode("utf-8")
+    def test_process_envelope_missing_payload(self):
+        env = MessageEnvelope(request_id="r", payload=None)
         client = mock.Mock()
         self.handler._client = client
-        self.handler._on_message(client, None, msg)
+        self.handler._process_envelope(env)
         client.publish.assert_called_once()
-        data = json.loads(client.publish.call_args[0][1])
-        self.assertNotEqual(data["errorCode"], 0)
+        env2, _ = client.publish.call_args[0]
+        self.assertEqual(env2.error_code, 1)
 
     def test_subscribe_device_validation_returns_handler(self):
         with mock.patch.object(DeviceValidationHandler, "start") as start:
-            handler = subscribe_device_validation("device-simple", self.driver)
+            handler = subscribe_device_validation(
+                "device-simple", self.driver, client=_FakeClient())
             start.assert_called_once()
             self.assertIsInstance(handler, DeviceValidationHandler)
 
@@ -604,8 +602,8 @@ class TestSubscribeSystemEvents(unittest.TestCase):
             logger=logging.getLogger("t"),
         )
         self.assertTrue(thread.is_alive())
-        self.assertIn("edgex/system-events/device-simple/#", client.subscribed_topics)
-        self.assertIn("edgex/system-events/device-profile/delete/#", client.subscribed_topics)
+        self.assertIn("edgex/system-events/core-metadata/+/+/device-simple/#", client.subscribed_topics)
+        self.assertIn("edgex/system-events/core-metadata/deviceprofile/delete/#", client.subscribed_topics)
         cancel.set()
         thread.join(timeout=2.0)
 
@@ -624,13 +622,13 @@ class TestSubscribeSystemEvents(unittest.TestCase):
             update_service=lambda d: None,
             logger=logging.getLogger("t"),
         )
-        q = client.get_queue_for("edgex/system-events/device-simple/")
+        q = client.get_queue_for("edgex/system-events/core-metadata/+/+/device-simple/")
         self.assertIsNotNone(q)
         evt = {
             "type": "device", "action": "delete", "owner": "device-simple",
             "details": {"name": "sensor-01"},
         }
-        q.put(MessageEnvelope(received_topic="edgex/system-events/device-simple/delete",
+        q.put(MessageEnvelope(received_topic="edgex/system-events/core-metadata/device/delete/device-simple",
                               payload=evt))
         deadline = time.time() + 1.0
         while time.time() < deadline and not deleted:

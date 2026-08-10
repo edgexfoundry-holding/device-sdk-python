@@ -217,6 +217,72 @@ class TestMessageEnvelope(unittest.TestCase):
         self.assertIsNone(env.query_params)
         self.assertEqual(env.api_version, "v3")
 
+    def test_to_json_uses_go_camelcase_keys(self):
+        env = MessageEnvelope(
+            received_topic="edgex/events/device/simple",
+            correlation_id="c1",
+            request_id="r1",
+            error_code=1,
+            payload={"x": 1},
+            content_type="application/json",
+            query_params={"a": "b"},
+        )
+        data = json.loads(env.to_json())
+        self.assertEqual(
+            set(data.keys()),
+            {"apiVersion", "receivedTopic", "correlationID", "requestID",
+             "errorCode", "payload", "contentType", "queryParams"},
+        )
+        self.assertEqual(data["receivedTopic"], "edgex/events/device/simple")
+        self.assertEqual(data["correlationID"], "c1")
+        self.assertEqual(data["requestID"], "r1")
+        self.assertEqual(data["errorCode"], 1)
+        self.assertEqual(data["payload"], {"x": 1})
+        self.assertEqual(data["contentType"], "application/json")
+        self.assertEqual(data["queryParams"], {"a": "b"})
+        self.assertEqual(data["apiVersion"], "v3")
+
+    def test_to_json_omits_empty_query_params(self):
+        env = MessageEnvelope(correlation_id="c1", query_params={})
+        data = json.loads(env.to_json())
+        self.assertNotIn("queryParams", data)
+
+    def test_from_json_accepts_go_camelcase_keys(self):
+        text = json.dumps({
+            "apiVersion": "v3",
+            "receivedTopic": "edgex/events/device/simple",
+            "correlationID": "c1",
+            "requestID": "r1",
+            "errorCode": 0,
+            "payload": {"a": 1},
+            "contentType": "application/json",
+            "queryParams": {"k": "v"},
+        })
+        env = MessageEnvelope.from_json(text)
+        self.assertEqual(env.received_topic, "edgex/events/device/simple")
+        self.assertEqual(env.correlation_id, "c1")
+        self.assertEqual(env.request_id, "r1")
+        self.assertEqual(env.error_code, 0)
+        self.assertEqual(env.payload, {"a": 1})
+        self.assertEqual(env.content_type, "application/json")
+        self.assertEqual(env.query_params, {"k": "v"})
+        self.assertEqual(env.api_version, "v3")
+
+    def test_from_json_accepts_snake_case_keys(self):
+        text = json.dumps({"correlation_id": "c1", "payload": {"a": 1}})
+        env = MessageEnvelope.from_json(text)
+        self.assertEqual(env.correlation_id, "c1")
+        self.assertEqual(env.payload, {"a": 1})
+
+    def test_from_json_camelcase_base64_bytes_payload(self):
+        import base64
+        text = json.dumps({
+            "payload": base64.b64encode(b"\x00\x01\x02").decode("ascii"),
+            "contentType": "application/cbor",
+        })
+        env = MessageEnvelope.from_json(text)
+        self.assertEqual(env.payload, b"\x00\x01\x02")
+
 
 class TestDecodeMessageEnvelope(unittest.TestCase):
     """Test _decode_message_envelope JSON/CBOR paths."""

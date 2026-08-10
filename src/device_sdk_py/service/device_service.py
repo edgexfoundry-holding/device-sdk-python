@@ -26,6 +26,7 @@ import os
 import queue
 import re
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
@@ -53,7 +54,7 @@ from ..internal.common.utils import (
     create_edgx_error,
     make_uid,
 )
-from ..internal.common.consts import OPERATING_STATE_UP
+from ..internal.common.consts import OPERATING_STATE_DOWN, OPERATING_STATE_UP
 from ..internal.controller.http import RestController
 from ..internal.controller.messaging.client import (
     MessageBusConfig,
@@ -1172,12 +1173,13 @@ hostname IP. Extended Core services (core-command) reach this address to execute
         self._message_bus_config_obj = cfg
         self._logger.debug("Initializing messaging client: %s://%s:%s",
                            cfg.broker_info.protocol, cfg.broker_info.host, cfg.broker_info.port)
-        self._messaging_client = create_message_client(cfg)
         try:
+            self._messaging_client = create_message_client(cfg)
             self._messaging_client.connect()
         except Exception as exc: # pylint: disable=broad-except
-            self._logger.warning("Failed to connect to message bus: %s; event publishing will be unavailable",
-                                 exc)
+            self._logger.warning(
+                "Failed to initialize message bus client (type '%s'): %s; "
+                "event publishing will be unavailable", cfg.message_bus_type, exc)
             self._messaging_client = None
             return
         # Wire the real send_event handler (replaces the no-op logging handler)
@@ -1203,6 +1205,7 @@ hostname IP. Extended Core services (core-command) reach this address to execute
                     source_name=event.source_name,
                     max_event_size=max_event_size,
                     logger=self._logger,
+                    metrics_manager=self.metrics_manager(),
                 )
             except Exception as exc: # pylint: disable=broad-except
                 self._logger.error("Failed to publish event to message bus: %s", exc)
@@ -1233,7 +1236,7 @@ service. Exposes nothing until ``run()`` so unit tests stay free of the network.
         self._validation_handler = subscribe_device_validation(
             service_name=self.name(), driver=self.driver,
             base_topic_prefix=cfg.base_topic_prefix,
-            broker_host=cfg.broker_info.host, broker_port=cfg.broker_info.port, logger=self._logger)
+            client=self._messaging_client, logger=self._logger)
 
     def run(self) -> None:
         """Start this Device Service. This should not be called directly by a device
@@ -1430,12 +1433,13 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
 
         # Transform to Event
         data_transform = True
+        reading_units = True
         device_opt = getattr(self.configuration, "device", None)
         if device_opt is not None:
             data_transform = getattr(device_opt, "data_transform", True)
             reading_units = getattr(device_opt, "reading_units", True)
 
-        from ..transformer.transform import command_values_to_event
+        from ..internal.transformer.transform import command_values_to_event
         try:
             event = command_values_to_event(
                 acv.command_values, acv.device_name, acv.source_name, data_transform, reading_units
@@ -1568,10 +1572,10 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
                         # Trigger a command read to test device connectivity
                         # The driver's handle_read_commands will be called
                         # On success, device_request_succeeded will be called and restore UP state
-                        from ..application import command_read
+                        from ..internal.application.command import command_read
                         command_read(
                             device_name=device.name,
-                            correlation_id=str(time.time_ns()),
+                            request_id=str(time.time_ns()),
                             command_name="",
                             driver=self.driver,
                             configuration=self.configuration,
@@ -1721,7 +1725,7 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
     def _start_command_subscription(self) -> None:
         """Subscribe to command requests on the message bus (EdgeX v4).
 
-        Topic: `<basePrefix>/command/request/<serviceName>/#`
+        Topic: `<basePrefix>/device/command/request/<serviceName>/#`
         Response: `<basePrefix>/response/<serviceName>/<requestId>`
         Concurrency limited to MaxConcurrentCommands (default 32).
         """
@@ -1753,9 +1757,9 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
         """Subscribe to Metadata system events (device/profile/watcher/service).
 
         Topics:
-        - `<basePrefix>/system-events/<serviceName>/#`
-        - `<basePrefix>/system-events/device-profile/delete/#`
-        - Instance name: `<basePrefix>/system-events/provision-watcher/<baseServiceName>/#`
+        - `<basePrefix>/system-events/core-metadata/+/+/<serviceName>/#`
+        - `<basePrefix>/system-events/core-metadata/deviceprofile/delete/#`
+        - Instance name: `<basePrefix>/system-events/core-metadata/provisionwatcher/+/<baseServiceName>/#`
         """
         if self._messaging_client is None or self._message_bus_config_obj is None:
             self._logger.debug("messaging client not available; system events subscription disabled")
@@ -1791,6 +1795,7 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
         """Handle Device add system event."""
         from ..internal.cache import Device
         device = Device(
+            id=details.get("id", ""),
             name=details.get("name", ""),
             description=details.get("description", ""),
             profile_name=details.get("profileName", ""),
@@ -1802,19 +1807,14 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
             auto_events=details.get("autoEvents", []),
             properties=details.get("properties", {}),
         )
-        if device.id:
-            device.id = details.get("id", "")
         Devices().add(device)
         self._logger.info("Device %s added via system event", device.name)
 
     def _on_device_updated(self, name: str, updates: Dict[str, Any]) -> None:
         """Handle Device update system event."""
         # Use existing patch logic
-        from ..internal.cache import UpdateDevice
-        update = UpdateDevice(name=name)
-        for k, v in updates.items():
-            if hasattr(update, k):
-                setattr(update, k, v)
+        update: Dict[str, Any] = {"name": name}
+        update.update(updates)
         self._patch_device_impl(update, bypass_validation=True)
         self._logger.info("Device %s updated via system event", name)
 
@@ -2170,7 +2170,7 @@ Stores the custom configuration so it can be included in the /config
         """Publish a generic system event through the EdgeX message bus.
 
         This is a general-purpose method for publishing custom system events.
-        The topic will be: `<baseTopicPrefix>/system-events/<serviceName>/<event_type>/<action>`
+        The topic will be: `<baseTopicPrefix>/system-events/<serviceName>/<event_type>/<action>/<serviceName>`
         """
         if self._messaging_client is None or self._message_bus_config_obj is None:
             self._logger.debug("No messaging client configured; system event %s/%s only logged",
@@ -2465,7 +2465,8 @@ Stores the custom configuration so it can be included in the /config
             send_event_handler=self._send_event_handler,
             device_discovery_stop_handler=self._device_discovery_stop_handler,
             profile_scan_handler=self._profile_scan_handler,
-            profile_scan_stop_handler=self._profile_scan_stop_handler)
+            profile_scan_stop_handler=self._profile_scan_stop_handler,
+            metrics_provider=self.metrics_manager().get_all_metrics)
         self.controller.init_rest_routes()
 
         for route, handler, methods in self._pending_custom_routes:
