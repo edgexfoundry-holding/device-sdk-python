@@ -1,10 +1,11 @@
 # device-sdk-python — 架构设计与开发任务书
 
-目标：把 `edgexfoundry/device-sdk-go` 移植为 Python 版（EdgeX Device Service SDK for Python），
-复用 `edgexfoundry/app-functions-sdk-python` 的 client / bootstrap / configuration / contracts 模块。
+目标：实现一个功能上与 `edgexfoundry/device-sdk-go` 完全等价的独立并行 SDK（EdgeX Device Service SDK for Python），
+可复用 `edgexfoundry/app-functions-sdk-python` 的 client / bootstrap / configuration / contracts 模块。
+`device-sdk-go` 仅作为功能参照，非移植对象。
 
 ## 参照项目
-- Go 原版：`../device-sdk-go`（移植对象）
+- Go 参照：`../device-sdk-go`（功能对照清单）
 - Python 参考：`../app-functions-sdk-python`（复用代码库）
 
 ## Python 版 ProtocolDriver（用户实现，对应 interfaces/protocoldriver.go）

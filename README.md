@@ -7,9 +7,11 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 [![EdgeX](https://img.shields.io/badge/EdgeX-4.x-red)](https://www.edgexfoundry.org/)
 
-Python port of the **EdgeX Foundry Device Service SDK** (originally `device-sdk-go` v4.x).
-Implements the full Device Service REST API, MessageBus event publishing, command subscription,
-metadata system events callback, auto-events, discovery, and provision watchers.
+**EdgeX Foundry Device Service SDK for Python** — an independent, parallel SDK project that fully
+covers the functionality of the official Go SDK (`device-sdk-go` v4.x), interoperating with the
+same EdgeX core services over the same wire contracts. Implements the full Device Service REST
+API, MessageBus event publishing, command subscription, metadata system events callback,
+auto-events, discovery, and provision watchers.
 
 ## Features
 
