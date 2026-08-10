@@ -6,18 +6,21 @@
 
 Exports:
 RestController: The REST controller owning the FastAPI application. It registers
-        the SDK reserved routes (device command, discovery, profile scan, ping / version
-        / config / metrics) and supports service-specific custom routes.
-    CommandController / DiscoveryController: The handler mixins contributed to the
-        `RestController`.
+        the SDK reserved routes (device command, discovery, profile scan, secret,
+        ping / version / config / metrics) and supports service-specific custom
+        routes.
+    CommandController / DiscoveryController / SecretController: The handler mixins
+        contributed to the `RestController`.
 """
 
 from .command import CommandController
 from .discovery import DiscoveryController
 from .router import RestController
+from .secret import SecretController
 
 __all__ = [
     "RestController",
     "CommandController",
     "DiscoveryController",
+    "SecretController",
 ]

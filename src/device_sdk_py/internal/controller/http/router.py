@@ -5,10 +5,10 @@
 `device-sdk-go/internal/controller/http/restrouter.go`.
 
 `RestController` owns the FastAPI application, registers the SDK reserved routes
-(discovery, profile scan, device command and the common ping / version / config /
-metrics endpoints) and exposes `add_route` for the service-specific routes added by
-`DeviceServiceSDK.add_custom_route`. Custom routes are rejected when their path matches
-a reserved route, map.
+(discovery, profile scan, device command, the secret management endpoint and the
+common ping / version / config / metrics endpoints) and exposes `add_route` for the
+service-specific routes added by `DeviceServiceSDK.add_custom_route`. Custom routes
+are rejected when their path matches a reserved route, map.
 
 The Go controller reads its dependencies (device service, configuration, protocol
 driver,...) from the DI container; the Python port receives them as constructor
@@ -41,6 +41,7 @@ from ...common.consts import (
     API_PING_ROUTE,
     API_PROFILE_SCAN_BY_DEVICE_NAME_ROUTE,
     API_PROFILE_SCAN_ROUTE,
+    API_SECRET_ROUTE,
     API_VERSION,
     API_VERSION_ROUTE,
     SDK_VERSION,
@@ -59,13 +60,14 @@ from._utils import (
 )
 from .command import CommandController
 from .discovery import DiscoveryController
+from .secret import SecretController
 
 #: The type of the route authentication hook (a FastAPI dependency). Mirrors the Go
 #: `authenticationHook` built by `handlers.AutoConfigAuthenticationFunc(dic)`.
 RouteAuthHook = Optional[Callable[..., Any]]
 
 
-class RestController(DiscoveryController, CommandController):
+class RestController(DiscoveryController, CommandController, SecretController):
     """The REST controller of the Device Service SDK.
 
     The handlers of the discovery / profile scan and device command routes are provided
@@ -166,6 +168,7 @@ class RestController(DiscoveryController, CommandController):
         self.add_reserved_route(API_VERSION_ROUTE, self.version, ["GET"])
         self.add_reserved_route(API_METRICS_ROUTE, self.metrics, ["GET"])
         self.add_reserved_route(API_CONFIG_ROUTE, self.config, ["GET"])
+        self.add_reserved_route(API_SECRET_ROUTE, self.add_secret, ["POST"])
 
         # discovery / profile scan
         self.add_reserved_route(API_DISCOVERY_ROUTE, self.discovery, ["POST"])

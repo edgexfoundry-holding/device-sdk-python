@@ -287,6 +287,7 @@ Aligned to `models.DeviceProfile` in deviceprofile.go. The caches store these ob
     labels: List[str] = field(default_factory=list)
     device_resources: List[DeviceResource] = field(default_factory=list)
     device_commands: List[DeviceCommand] = field(default_factory=list)
+    resources: List[ResourceOperation] = field(default_factory=list)
     add_tags: Dict[str, Any] = field(default_factory=dict)
     properties: Dict[str, Any] = field(default_factory=dict)
     created: int = 0
@@ -344,6 +345,7 @@ Aligned to `models.ProvisionWatcher` in provisionwatcher.go. The caches store th
     discovered_device: ProvisionWatcherDiscoveredDevice = field(default_factory=ProvisionWatcherDiscoveredDevice)
     created: int = 0
     modified: int = 0
+    origin: int = 0
 
     def clone(self) -> "ProvisionWatcher":
         """Return a deep copy of this ProvisionWatcher
