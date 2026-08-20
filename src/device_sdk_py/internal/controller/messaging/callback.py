@@ -281,7 +281,7 @@ base_service_name: Optional[str], # service name without instance suffix
                 # Process events from any subscribed topic
                 for topic_queue in topics:
                     try:
-                        envelope = topic_queue.message_queue.get_nowait()
+                        envelope = topic_queue.message_queue.get(timeout=0.1)
                     except __import__("queue").Empty:
                         continue
 

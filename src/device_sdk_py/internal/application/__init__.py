@@ -27,6 +27,20 @@ from .command import (
     failure_count,
     set_failure_count,
 )
+from .callback import (
+    add_device,
+    add_provision_watcher,
+    delete_device,
+    delete_profile,
+    delete_provision_watcher,
+    update_associated_profile,
+    update_device,
+    update_device_service,
+    update_profile,
+    update_provision_watcher,
+)
+from .devicereturn import device_return, start_device_return
+from .profilescan import profile_scan_wrapper, stop_profile_scan
 
 __all__ = [
     "command_read",
@@ -37,4 +51,18 @@ __all__ = [
     "decrease_failure_count",
     "device_request_failed",
     "device_request_succeeded",
+    "device_return",
+    "start_device_return",
+    "add_device",
+    "add_provision_watcher",
+    "delete_device",
+    "delete_profile",
+    "delete_provision_watcher",
+    "update_associated_profile",
+    "update_device",
+    "update_device_service",
+    "update_profile",
+    "update_provision_watcher",
+    "profile_scan_wrapper",
+    "stop_profile_scan",
 ]

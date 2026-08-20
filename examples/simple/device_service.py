@@ -44,102 +44,61 @@ from device_sdk_py.models import (
     VALUETYPE_STRING,
 )
 from device_sdk_py.service.bootstrap import bootstrap
+from device_sdk_py.internal.common import (
+    ConfigurationStruct,
+    ClientInfo,
+    MessageBusInfo,
+    DiscoveryInfo,
+    load_configuration,
+)
 
 
-class _Paths:
-    """Mimics the EdgeX ``configurationstruct.Paths`` (res root)."""
-
-    def __init__(self, res_root: str) -> None:
-        self.res_root = res_root
-
-
-class _Service:
-    """Mimics the EdgeX ``configurationstruct.Service`` (host / port)."""
-
-    def __init__(self, host: str, port: int) -> None:
-        self.host = host
-        self.port = port
-
-
-class _MessageBus:
-    """Mimics the EdgeX ``MessageBus`` config (MQTT broker + base topic prefix)."""
-
-    def __init__(self, host: str, port: int, base_topic_prefix: str = "edgex",
-                 message_bus_type: str = "mqtt", auth_mode: str = "none",
-                 optional: Optional[Dict[str, str]] = None,
-                 # TLS/SSL options for Secure MessageBus
-                 cert_file: str = "", key_file: str = "", ca_file: str = "",
-                 skip_cert_verify: bool = False) -> None:
-        self.host = host
-        self.port = port
-        self.base_topic_prefix = base_topic_prefix
-        self.type = message_bus_type
-        self.auth_mode = auth_mode
-        self.optional = optional or {}
-        # TLS/SSL options for Secure MessageBus
-        if cert_file:
-            self.optional["CertFile"] = cert_file
-        if key_file:
-            self.optional["KeyFile"] = key_file
-        if ca_file:
-            self.optional["CaFile"] = ca_file
-        if skip_cert_verify:
-            self.optional["SkipCertVerify"] = "true"
-
-
-class _Device:
-    """Mimics the EdgeX ``configurationstruct.Device`` (labels, resource dirs, discovery, device down, security)."""
-
-    def __init__(self, labels=None) -> None:
-        self.labels = list(labels or [])
-        self.profiles_dir = "./res/profiles"
-        self.devices_dir = "./res/devices"
-        self.provision_watchers_dir = "./res/provisionwatchers"
-        self.discovery = None
-        # Device Down auto-recovery options
-        self.allowed_fails = 3
-        self.device_down_timeout = 30
-        self.async_buffer_size = 100
-        self.max_cmd_result_len = 1024
-        self.max_event_size = 4096
-        self.reading_units = True
-        self.send_changed_readings_only = False
-        # Secure mode options
-        self.secure_mode = False
-        self.ssl_certfile = ""
-        self.ssl_keyfile = ""
-        self.secretstore_token_file = ""
-        self.vault_addr = ""
-        self.openbao_addr = ""
-
-        self._watchers_dir = "./res/provisionwatchers"
-        self.discovery = None
-
-
-class Configuration:
+class Configuration(ConfigurationStruct):
     """The device-simple configuration consumed by the SDK bootstrap.
 
-    Carries the EdgeX-style sections the ``DeviceService`` reads defensively: ``service``
-    (host / port), ``paths`` (res root), ``clients`` (core-metadata endpoint), ``message_bus``
-    (MQTT broker for device validation) and ``device`` (labels).  ``Configuration.load`` reads
-    these from ``res/configuration.yaml``.
+    Now a subclass of the SDK's Go-aligned ``ConfigurationStruct`` so that
+    ``GET /api/v3/config`` returns the same structure as the Go SDK while the
+    SDK's defensive lowercase attribute reads keep working via ``_GoModel``.
     """
 
     def __init__(self, res_root: str, host: str = "0.0.0.0", port: int = 59986,
                  enable_metadata: bool = False) -> None:
-        self.paths = _Paths(res_root)
-        self.service = _Service(host=host, port=port)
-        self.device = _Device()
-        self.message_bus = None
-        # The EdgeX-style ``clients`` map used by ``DeviceService`` to resolve the Core
-        # Metadata endpoint.  Enabled from ``main()`` so the runnable service registers
-        # itself / profiles / devices / watchers with core-keeper; unit tests keep it off
-        # so they stay hermetic.
-        self.clients = None
+        super().__init__()
+        # Python-specific paths section
+        self.Paths.ResRoot = res_root
+        # Service
+        self.Service.Host = host
+        self.Service.Port = port
+        # Device - device-simple specific defaults (override Go defaults)
+        d = self.Device
+        d.AllowedFails = 3
+        d.DeviceDownTimeout = 30
+        d.AsyncBufferSize = 100
+        d.MaxCmdResultLen = 1024
+        d.MaxEventSize = 4096
+        d.MaxConcurrentCommands = 0
+        d.ReadingUnits = True
+        d.send_changed_readings_only = False
+        d.SecureMode = False
+        d.SslCertFile = ""
+        d.SslKeyFile = ""
+        d.SecretStoreTokenFile = ""
+        d.VaultAddr = ""
+        d.OpenBaoAddr = ""
+        d.ProfilesDir = "./res/profiles"
+        d.DevicesDir = "./res/devices"
+        d.ProvisionWatchersDir = "./res/provisionwatchers"
+        d.Discovery = DiscoveryInfo(Enabled=False, Interval="0s")
+        # MessageBus - default instance for Go-style config output
+        self.MessageBus = MessageBusInfo()
+        # Clients
+        self.Clients = {}
         if enable_metadata:
             base_url = os.environ.get(
                 "EDGEX_CORE_METADATA_URL", "http://localhost:59881")
-            self.clients = {"core-metadata": {"base_url": base_url}}
+            self.Clients = {
+                "core-metadata": ClientInfo(
+                    Host="localhost", Port=59881, Protocol="http", BaseUrl=base_url)}
 
     @classmethod
     def load(cls, config_path: str) -> "Configuration":
@@ -149,62 +108,31 @@ class Configuration:
             config_path: Path to the YAML file.  Relative paths inside it (e.g. ``res/``)
                 are resolved against the file's directory.
         """
-        import yaml
-
-        with open(config_path, "r", encoding="utf-8") as handle:
-            data = yaml.safe_load(handle) or {}
-        base_dir = os.path.dirname(os.path.abspath(config_path))
-
-        def get_val(d: dict, *keys) -> str:
-            for key in keys:
-                val = d.get(key)
-                if val:
-                    return val
-            return ""
-
-        service = data.get("Service", {}) or {}
-        clients = data.get("Clients", {}) or {}
-        message_bus = data.get("MessageBus", {}) or {}
-        device = data.get("Device", {}) or {}
-        paths = data.get("Paths", {}) or {}
-
-        res_dir = get_val(paths, "Res", "res")
-        res_root = res_dir if os.path.isabs(res_dir) else os.path.join(base_dir, res_dir)
-        res_root = os.path.abspath(res_root)
-        config = cls(res_root=res_root,
-                     host=get_val(service, "Host") or "0.0.0.0",
-                     port=int(get_val(service, "Port") or 59986))
-
-        # Wire the raw dicts into the sections DeviceService reads defensively.
-        hosty = (clients.get("core-metadata") or {})
-        if isinstance(hosty, dict) and (hosty.get("Host") or hosty.get("base_url")):
-            if hosty.get("base_url"):
-                config.clients = {"core-metadata": {"base_url": hosty["base_url"]}}
-            elif hosty.get("Host") and hosty.get("Port"):
-                config.clients = {"core-metadata": {
-                    "host": hosty["Host"], "port": hosty["Port"]}}
-
-        config.message_bus = _MessageBus(
-            host=get_val(message_bus, "Host") or "127.0.0.1",
-            port=int(get_val(message_bus, "Port") or 1883),
-            base_topic_prefix=get_val(message_bus, "BaseTopicPrefix", "baseTopicPrefix") or "edgex",
-            message_bus_type=get_val(message_bus, "Type", "type") or "mqtt",
-            auth_mode=get_val(message_bus, "AuthMode", "authMode") or "none",
-            optional=message_bus.get("Optional", {}) or {})
-
-        config.device = _Device(labels=device.get("Labels") or [])
-        config.device.allowed_fails = int(get_val(device, "AllowedFails") or 3)
-        config.device.device_down_timeout = int(get_val(device, "DeviceDownTimeout") or 30)
-        config.device.async_buffer_size = int(get_val(device, "AsyncBufferSize") or 100)
-        config.device.max_cmd_result_len = int(get_val(device, "MaxCmdResultLen") or 1024)
-        config.device.max_event_size = int(get_val(device, "MaxEventSize") or 4096)
-        config.device.reading_units = get_val(device, "ReadingUnits", "readingUnits") != "false"
-        config.device.send_changed_readings_only = get_val(device, "SendChangedReadingsOnly", "sendChangedReadingsOnly") == "true"
-
-        startup_msg = get_val(service, "StartupMsg")
-        if startup_msg:
-            config.service.startup_msg = startup_msg
-        return config
+        cfg = load_configuration(config_path)
+        # Apply device-simple specific defaults that differ from Go defaults
+        d = cfg.Device
+        d.AllowedFails = 3
+        d.DeviceDownTimeout = 30
+        d.AsyncBufferSize = 100
+        d.MaxCmdResultLen = 1024
+        d.MaxEventSize = 4096
+        d.MaxConcurrentCommands = 0
+        d.ReadingUnits = True
+        d.send_changed_readings_only = False
+        d.SecureMode = False
+        d.SslCertFile = ""
+        d.SslKeyFile = ""
+        d.SecretStoreTokenFile = ""
+        d.VaultAddr = ""
+        d.OpenBaoAddr = ""
+        d.ProfilesDir = "./res/profiles"
+        d.DevicesDir = "./res/devices"
+        d.ProvisionWatchersDir = "./res/provisionwatchers"
+        d.Discovery = DiscoveryInfo(Enabled=False, Interval="0s")
+        # Make sure MessageBus has sensible defaults if not in YAML
+        if cfg.MessageBus is None:
+            cfg.MessageBus = MessageBusInfo()
+        return cfg
 
 
 class SimpleDriver(ExtendedProtocolDriver):

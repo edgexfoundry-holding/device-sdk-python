@@ -22,6 +22,9 @@ from .secret import (
     create_secret_provider,
 )
 from .metrics import MetricsManager, Counter, Gauge, GaugeFloat64, Timer
+from .data import CoreDataClient, CoreDataClientConfig, create_coredata_client
+from .command import CoreCommandClient, CoreCommandClientConfig, create_corecommand_client
+from .tls import TLSManager, TLSConfig, CertificateInfo, create_self_signed_cert, create_server_ssl_context, create_client_ssl_context
 
 __all__ = [
     "Logger",
@@ -34,4 +37,16 @@ __all__ = [
     "Gauge",
     "GaugeFloat64",
     "Timer",
+    "CoreDataClient",
+    "CoreDataClientConfig",
+    "create_coredata_client",
+    "CoreCommandClient",
+    "CoreCommandClientConfig",
+    "create_corecommand_client",
+    "TLSManager",
+    "TLSConfig",
+    "CertificateInfo",
+    "create_self_signed_cert",
+    "create_server_ssl_context",
+    "create_client_ssl_context",
 ]

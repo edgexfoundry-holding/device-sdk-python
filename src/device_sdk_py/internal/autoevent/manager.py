@@ -93,6 +93,21 @@ class AutoEventManager:
                 except Exception: # pragma: no cover - defensive
                     self._logger.exception("AutoEvent - error stopping executor")
 
+    def stop_for_device(self, device_name: str) -> None:
+        """Stop the auto events scheduled for a single device.
+
+        Mirrors Go `AutoEventManager.StopForDevice`.
+        """
+        self._logger.debug("Stopping AutoEvents for device %s", device_name)
+        with self._lock:
+            existing = self._executors.pop(device_name, [])
+        for executor in existing:
+            try:
+                executor.stop()
+            except Exception:  # pragma: no cover - defensive
+                self._logger.exception("AutoEvent - error stopping executor for %s",
+                                       device_name)
+
     # ------------------------------------------------------------------ #
     # Scheduling
     # ------------------------------------------------------------------ #

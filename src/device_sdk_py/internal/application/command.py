@@ -133,6 +133,19 @@ def decrease_failure_count(device_name: str) -> int:
     return _allowed_request_failures[device_name]
 
 
+def initialize_failure_tracker(configuration: Any) -> None:
+    """Initialize the failure tracker for all devices from configuration.
+
+    Mirrors Go's init.go:71-78 - initializes the failure tracker with
+    config.Device.AllowedFails for all devices in the cache.
+    """
+    allowed_fails = _device_option(configuration, "allowed_fails", 0)
+    if allowed_fails <= 0:
+        return
+    for device in Devices().all():
+        set_failure_count(device.name, allowed_fails)
+
+
 def device_request_failed(device_name: str, configuration: Any,
                           logger: Optional[logging.Logger] = None,
                           device_service: Any = None) -> None:

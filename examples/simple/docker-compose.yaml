@@ -4,14 +4,9 @@
 # Device Simple - Docker Compose for local development
 # Usage: docker compose -f examples/simple/docker-compose.yaml up --build
 #
-# Note: For full EdgeX deployment, use EdgeX's docker-compose which already includes
-# MQTT broker (messagebus), core-metadata, core-data, etc. This file is for
-# standalone testing of device-simple only.
-# For Secure Mode, add the following:
-#   - EDGEX_SECURE_MODE=true to device-simple environment
-#   - TLS certificates in a volume
-#   - security-bootstrapper and related security services (from edgex-compose)
-#   - EDGEX_ADD_PROXY_ROUTE on security-proxy-setup
+# Connects to existing EdgeX core services (core-metadata, core-data,
+# core-command, core-keeper, redis, postgres, mqtt broker) which must
+# already be running (e.g., via edgex-compose).
 
 version: '3.8'
 
@@ -21,6 +16,23 @@ services:
     container_name: edgex-device-simple
     environment:
       SERVICE_HOST: edgex-device-simple
+      SERVICE_PORT: 59986
+      EDGEX_MESSAGEBUS_HOST: edgex-mqtt-broker
+      EDGEX_MESSAGEBUS_PORT: 1883
+      EDGEX_MESSAGEBUS_TOPIC: edgex
+      EDGEX_MESSAGEBUS_TYPE: mqtt
+      EDGEX_MESSAGEBUS_AUTHMODE: none
+      EDGEX_MESSAGEBUS_BASE_TOPIC_PREFIX: edgex
+      EDGEX_REGISTRY_HOST: edgex-core-keeper
+      EDGEX_REGISTRY_PORT: 8500
+      EDGEX_REGISTRY_TYPE: core-keeper
+      EDGEX_CLIENTS_CORE_METADATA_HOST: edgex-core-metadata
+      EDGEX_CLIENTS_CORE_METADATA_PORT: 59881
+      EDGEX_CLIENTS_CORE_METADATA_PROTOCOL: http
+      EDGEX_CLIENTS_CORE_DATA_HOST: edgex-core-data
+      EDGEX_CLIENTS_CORE_DATA_PORT: 59880
+      EDGEX_CLIENTS_CORE_COMMAND_HOST: edgex-core-command
+      EDGEX_CLIENTS_CORE_COMMAND_PORT: 59882
       # Secure Mode configuration:
       # EDGEX_SECURE_MODE: "true"
       # SSLCERTFILE: "/etc/edgex/secrets/device-simple/cert.pem"
@@ -35,31 +47,15 @@ services:
     networks:
       - edgex-network
     volumes:
-      # use host timezone
       - /etc/localtime:/etc/localtime:ro
-      # Secure Mode volumes (uncomment when running in secure mode):
-      # - ./certs:/etc/edgex/secrets/device-simple:ro,z
-      # - edgex-init:/edgex-init:ro,z
-      # - edgex-secrets:/tmp/edgex/secrets/device-simple:ro,z
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://edgex-device-simple:59986/api/v3/ping', timeout=3).raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
 
-# For Secure Mode, uncomment and add security services from edgex-compose:
-# security-bootstrapper:
-#   ...
-# security-proxy-setup:
-#   environment:
-#     EDGEX_ADD_PROXY_ROUTE: "device-simple.http://edgex-device-simple:59986"
-#   depends_on:
-#     - security-bootstrapper
-#   volumes:
-#     - edgex-init:/edgex-init:ro,z
-# secretstore-setup:
-#   environment:
-#     EDGEX_ADD_SECRETSTORE_TOKENS: "device-simple"
-#     EDGEX_ADD_KNOWN_SECRETS: "postgres[device-simple],message-bus[device-simple],message-bus[device-virtual]"
-#   volumes:
-#     - edgex-init:/edgex-init:ro,z
-
-# Secure Mode volumes (uncomment when running in secure mode):
-# volumes:
-#   edgex-init:
-#   edgex-secrets:
+networks:
+  edgex-network:
+    external: true
+    name: edgex_edgex-network

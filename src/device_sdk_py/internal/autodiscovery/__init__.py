@@ -58,26 +58,41 @@ def run_discovery_wrapper(
     driver: ExtendedProtocolDriver,
     ctx_cancel: threading.Event,
     dic: Any,
+    device_service: Optional["DeviceService"] = None,
+    request_id: str = "",
 ) -> None:
     """Wrapper to run device discovery with proper locking and error handling.
 
-    Mirrors `autodiscovery.DiscoveryWrapper` from Go SDK.
+    Mirrors `autodiscovery.DiscoveryWrapper` from Go SDK, including the discovery
+    progress system events published on start / success / failure.
 
     Args:
         driver: The protocol driver implementing ExtendedProtocolDriver.
         ctx_cancel: Cancellation event to signal shutdown.
         dic: Dependency injection container (not used in Python port).
+        device_service: The DeviceService used to publish progress system events.
+        request_id: Optional correlation id for the discovery run.
     """
     with _locker.lock() as acquired:
         if not acquired:
             _LOGGER.info("Another device discovery process is currently running")
             return
 
+        if device_service is not None and hasattr(
+                device_service, "publish_device_discovery_progress_system_event"):
+            device_service.publish_device_discovery_progress_system_event(0, 0, "")
         _LOGGER.info("Starting scheduled device discovery")
         try:
             driver.discover()
+            if device_service is not None and hasattr(
+                    device_service, "publish_device_discovery_progress_system_event"):
+                device_service.publish_device_discovery_progress_system_event(100, 0, "")
         except Exception as exc:  # pylint: disable=broad-except
             _LOGGER.exception("Scheduled device discovery failed: %s", exc)
+            if device_service is not None and hasattr(
+                    device_service, "publish_device_discovery_progress_system_event"):
+                device_service.publish_device_discovery_progress_system_event(
+                    -1, 0, f"Failed to trigger discovery: {exc}")
         finally:
             _LOGGER.info("Scheduled device discovery completed")
 
@@ -108,7 +123,7 @@ def run_discovery_scheduler(
             break
 
         # Run discovery
-        run_discovery_wrapper(driver, ctx_cancel, None)
+        run_discovery_wrapper(driver, ctx_cancel, None, device_service=device_service)
 
 
 def bootstrap_autodiscovery(

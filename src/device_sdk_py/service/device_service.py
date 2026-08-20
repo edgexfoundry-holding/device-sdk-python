@@ -91,6 +91,9 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
+# Core Data client imports (moved to top level to avoid mock issues in tests)
+from ..internal.clients.data import create_coredata_client, CoreDataClientConfig
+
 #: The default host / port the HTTP server binds to when the configuration does not
 #: provide them (matches the EdgeX device service default port).
 _DEFAULT_HTTP_HOST = "0.0.0.0"
@@ -174,6 +177,12 @@ class DeviceService(DeviceServiceSDK):
 
         #: The lazily imported AutoEvent manager (see `_auto_event_manager`).
         self._auto_event_manager_instance: Any = None
+
+        #: Core Command client for sending commands to devices via Core Command
+        self._corecommand_client: Optional[Any] = None
+
+        #: Core Data client for sending events/readings to Core Data
+        self._coredata_client: Optional[Any] = None
 
         #: The lazily created Core Metadata client (see `_metadata_client`).
         self._metadata_client_instance: Optional[MetadataClient] = None
@@ -1272,6 +1281,12 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
         self._logger.info("Device Service %s (v%s) started",
                           self.name(), self.version())
 
+        # Initialize Core Data client for sending events to Core Data
+        self._init_coredata_client()
+
+        # Initialize Core Command client for sending commands to devices via Core Command
+        self._init_corecommand_client()
+
         host, port = self._http_host_port()
         try:
             import uvicorn
@@ -1305,6 +1320,108 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
             )
         finally:
             self._shutdown()
+
+    def _init_coredata_client(self) -> None:
+        """Initialize Core Data client for sending events/readings to Core Data."""
+        if self._coredata_client is not None:
+            return
+        
+        base_url = self._get_coredata_base_url()
+        if not base_url:
+            self._logger.warning("Core Data base URL not configured; event publishing disabled")
+            return
+        
+        config = CoreDataClientConfig(
+            base_url=base_url,
+            timeout=10.0,
+            max_retries=3,
+        )
+        self._coredata_client = create_coredata_client(
+            config=config,
+            jwt_token_provider=lambda: self._get_jwt_token() if hasattr(self, '_get_jwt_token') else None,
+            logger=self._logger,
+        )
+        self._coredata_client.start_flush_worker()
+        self._logger.info("Core Data client initialized: %s", base_url)
+
+    def _get_coredata_base_url(self) -> Optional[str]:
+        """Get Core Data base URL from configuration or environment."""
+        if not self.configuration:
+            return None
+            
+        clients = getattr(self.configuration, "clients", None)
+        core_data = None
+        if isinstance(clients, dict):
+            core_data = clients.get("core-data")
+        elif clients is not None:
+            core_data = getattr(clients, "core-data", None) \
+                or getattr(clients, "core_data", None)
+        
+        if core_data is not None:
+            if isinstance(core_data, dict):
+                return core_data.get("base_url") or f"http://{core_data.get('host', '')}:{core_data.get('port', 0)}"
+            base_url = getattr(core_data, "base_url", "")
+            if base_url:
+                return base_url
+            return None
+
+    def _init_corecommand_client(self) -> None:
+        """Initialize Core Command client for sending commands to devices via Core Command."""
+        if self._corecommand_client is not None:
+            return
+        
+        base_url = self._get_corecommand_base_url()
+        if not base_url:
+            self._logger.warning("Core Command base URL not configured; command sending disabled")
+            return
+        
+        config = CoreCommandClientConfig(
+            base_url=base_url,
+            timeout=10.0,
+            max_retries=3,
+        )
+        self._corecommand_client = create_corecommand_client(
+            config=config,
+            jwt_token_provider=lambda: self._get_jwt_token() if hasattr(self, '_get_jwt_token') else None,
+            logger=self._logger,
+        )
+        self._logger.info("Core Command client initialized: %s", base_url)
+
+    def _get_corecommand_base_url(self) -> Optional[str]:
+        """Get Core Command base URL from configuration or environment."""
+        if not self.configuration:
+            return None
+            
+        clients = getattr(self.configuration, "clients", None)
+        core_command = None
+        if clients is not None:
+            if isinstance(clients, dict):
+                core_command = clients.get("core-command")
+            else:
+                core_command = getattr(clients, "core-command", None) \
+                    or getattr(clients, "core_command", None)
+        
+        if core_command is not None:
+            if isinstance(core_command, dict):
+                return core_command.get("base_url") or f"http://{core_command.get('host', '')}:{core_command.get('port', 0)}"
+            base_url = getattr(core_command, "base_url", "")
+            if base_url:
+                return base_url
+            host = getattr(core_command, "host", "")
+            port = getattr(core_command, "port", 0)
+            if host and port:
+                return f"http://{host}:{port}"
+        
+        # Fallback to environment
+        base_url = os.environ.get("EDGEX_CORE_COMMAND_URL", "")
+        if not base_url:
+            host = os.environ.get("EDGEX_CORE_COMMAND_HOST", "")
+            port = os.environ.get("EDGEX_CORE_COMMAND_PORT", "")
+            if host and port:
+                return f"http://{host}:{port}"
+            if host:
+                return f"http://{host}:59882"
+        return None
 
     def stop(self) -> None:
         """Gracefully stop this Device Service.
@@ -1454,6 +1571,15 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
         # Publish via send_event handler (which uses messaging client)
         if self._send_event_handler is not None:
             self._send_event_handler(event, "")
+
+        # Publish to Core Data via Core Data client
+        if self._coredata_client is not None:
+            try:
+                success = self._coredata_client.send_event(event)
+                if not success:
+                    self._logger.warning("Failed to send event to Core Data: %s", event.device_name)
+            except Exception as exc:
+                self._logger.error("Failed to send event to Core Data: %s", exc)
 
     def _process_discovered_devices(self, devices: List[DiscoveredDevice]) -> None:
         """Match discovered devices against ProvisionWatchers and register via Core Metadata.
@@ -1808,6 +1934,10 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
             properties=details.get("properties", {}),
         )
         Devices().add(device)
+        if self.driver is not None and hasattr(self.driver, "add_device"):
+            self.driver.add_device(
+                device.name, device.protocols, device.admin_state
+            )
         self._logger.info("Device %s added via system event", device.name)
 
     def _on_device_updated(self, name: str, updates: Dict[str, Any]) -> None:
@@ -1816,11 +1946,15 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
         update: Dict[str, Any] = {"name": name}
         update.update(updates)
         self._patch_device_impl(update, bypass_validation=True)
+        if self.driver is not None and hasattr(self.driver, "update_device"):
+            self.driver.update_device(name, {}, "UNLOCKED")
         self._logger.info("Device %s updated via system event", name)
 
     def _on_device_deleted(self, name: str) -> None:
         """Handle Device delete system event."""
         self.remove_device_by_name(name)
+        if self.driver is not None and hasattr(self.driver, "remove_device"):
+            self.driver.remove_device(name, {})
         self._logger.info("Device %s deleted via system event", name)
 
     def _on_profile_added(self, details: Dict[str, Any]) -> None:
@@ -2482,6 +2616,8 @@ Stores the custom configuration so it can be included in the /config
     def _http_host_port(self) -> Tuple[str, int]:
         """Return the host / port the HTTP server binds to, read defensively from the
         configuration (the Python `ConfigurationStruct` model is not ported yet).
+
+        Returns (bind_host, port) where bind_host is the interface to bind to.
         """
         service = getattr(self.configuration, "service", None)
         host = getattr(service, "host", _DEFAULT_HTTP_HOST) if service is not None \

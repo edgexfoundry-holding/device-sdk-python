@@ -21,10 +21,12 @@ from .service import (
     DeviceServiceSDK,
     UpdatableConfig,
 )
+from .manager import AutoEventManager
 
 __all__ = [
     "AUTHENTICATED",
     "UNAUTHENTICATED",
+    "AutoEventManager",
     "DeviceServiceSDK",
     "ExtendedProtocolDriver",
     "ProtocolDriver",

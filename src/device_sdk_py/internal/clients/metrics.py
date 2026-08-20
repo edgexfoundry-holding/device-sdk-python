@@ -246,3 +246,32 @@ class MetricsManager:
             for k, v in self._timers.items():
                 result[k] = {"type": "timer", "value": v.value}
             return result
+
+    def register_counter(self, name: str, labels: Optional[Dict[str, str]] = None) -> Counter:
+        """Register a counter with the given name and labels.
+        
+        This is the Python equivalent of Go's InitializeSentMetrics - it registers
+        the EventsSent and ReadingsSent counters with the MetricsManager at startup
+        so they can be reported via the metrics endpoint.
+        """
+        key = self._make_key(name, labels)
+        with self._lock:
+            if key not in self._counters:
+                self._counters[key] = _Counter()
+            return Counter(self._counters[key])
+
+    def register_gauge(self, name: str, labels: Optional[Dict[str, str]] = None) -> Gauge:
+        """Register a gauge with the given name and labels."""
+        key = self._make_key(name, labels)
+        with self._lock:
+            if key not in self._gauges:
+                self._gauges[key] = _Gauge()
+            return Gauge(self._gauges[key])
+
+    def register_gauge_float64(self, name: str, labels: Optional[Dict[str, str]] = None) -> GaugeFloat64:
+        """Register a float gauge with the given name and labels."""
+        key = self._make_key(name, labels)
+        with self._lock:
+            if key not in self._gauge_floats:
+                self._gauge_floats[key] = _GaugeFloat64()
+            return GaugeFloat64(self._gauges[key])

@@ -6,7 +6,7 @@ Writable:
   LogLevel: INFO
 
 Service:
-  Host: "0.0.0.0"          # bind all interfaces
+  Host: "localhost"         # advertise localhost for health checks
   Port: 59986               # device service port (599xx range)
   StartupMsg: "device simple started"
 

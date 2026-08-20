@@ -48,6 +48,7 @@ from ...common.consts import (
     SERVICE_VERSION,
 )
 from ...common.utils import EdgexError, create_edgx_error, KIND_SERVER_ERROR
+from ...common.configuration import ConfigurationStruct
 from .auth import (
     JWTAuthMiddleware,
     get_jwt_authenticator,
@@ -305,14 +306,15 @@ Mirrors the bootstrap common controller `Metrics` handler. The metrics are
 
     def _config_to_dict(self) -> Dict[str, Any]:
         """Serialize the service configuration (and the custom configuration) into a
-JSON friendly structure. The Python `ConfigurationStruct` model is ported in a
-        later phase, so dataclasses / dicts are handled and everything else is converted
-        defensively.
+        JSON friendly structure. The Python `ConfigurationStruct` model is serialized
+        in the Go shape (PascalCase, sorted keys, zero values, nil maps -> null).
         """
         config = self.configuration
         if config is None:
             return {}
-        if is_dataclass(config) and not isinstance(config, type):
+        if isinstance(config, ConfigurationStruct):
+            result = config.to_go_dict()
+        elif is_dataclass(config) and not isinstance(config, type):
             result = {
                 key: value for key, value in config.__dict__.items()
                 if value is not None
@@ -324,7 +326,7 @@ JSON friendly structure. The Python `ConfigurationStruct` model is ported in a
 
         if self.custom_config is not None:
             if is_dataclass(self.custom_config) and not isinstance(self.custom_config,
-                                                                  type):
+                                                                   type):
                 result["Custom"] = {
                     key: value for key, value in self.custom_config.__dict__.items()
                     if value is not None
