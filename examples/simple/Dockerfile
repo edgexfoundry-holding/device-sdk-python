@@ -43,11 +43,11 @@ ENV PYTHONPATH=/usr/local/lib/python3.12/site-packages \
     EDGEX_MESSAGEBUS_TOPIC=edgex
 
 # Expose default device service port
-EXPOSE 59986
+EXPOSE 59990
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:59986/api/v3/ping', timeout=3)" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:59990/api/v3/ping', timeout=3)" || exit 1
 
 # Default command runs the simple service
 CMD ["python", "./device_service.py"]

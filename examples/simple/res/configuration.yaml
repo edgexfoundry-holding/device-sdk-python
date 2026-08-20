@@ -7,7 +7,7 @@ Writable:
 
 Service:
   Host: "localhost"         # advertise localhost for health checks
-  Port: 59986               # device service port (599xx range)
+  Port: 59990               # device service port (599xx range)
   StartupMsg: "device simple started"
 
 # MessageBus - uses SDK defaults (host=localhost, port=1883, prefix=edgex, type=mqtt)

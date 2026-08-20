@@ -97,7 +97,7 @@ from ..internal.clients.data import create_coredata_client, CoreDataClientConfig
 #: The default host / port the HTTP server binds to when the configuration does not
 #: provide them (matches the EdgeX device service default port).
 _DEFAULT_HTTP_HOST = "0.0.0.0"
-_DEFAULT_HTTP_PORT = 59986
+_DEFAULT_HTTP_PORT = 59990
 
 
 @dataclass

@@ -4,7 +4,7 @@
 
 This is the Python counterpart of the Go ``device-simple`` example.  It wires a trivial
 ProtocolDriver (which synthesises a fake reading on every Get) into the SDK bootstrap and
-serves the standard EdgeX REST API on the configured port (default 59986).
+serves the standard EdgeX REST API on the configured port (default 59990).
 
 The pre-defined DeviceProfile / Device / ProvisionWatcher shipped under ``res/`` are
 loaded and registered into the internal caches by the bootstrap (mirrors the Go
@@ -17,9 +17,9 @@ Run with::
 
 Then probe::
 
-    curl http://localhost:59986/api/v3/ping
-    curl http://localhost:59986/api/v3/version
-    curl http://localhost:59986/api/v3/device/name/fake/Get
+    curl http://localhost:59990/api/v3/ping
+    curl http://localhost:59990/api/v3/version
+    curl http://localhost:59990/api/v3/device/name/fake/Get
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ class Configuration(ConfigurationStruct):
     SDK's defensive lowercase attribute reads keep working via ``_GoModel``.
     """
 
-    def __init__(self, res_root: str, host: str = "0.0.0.0", port: int = 59986,
+    def __init__(self, res_root: str, host: str = "0.0.0.0",     port: int = 59990,
                  enable_metadata: bool = False) -> None:
         super().__init__()
         # Python-specific paths section

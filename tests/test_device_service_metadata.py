@@ -509,7 +509,7 @@ class TestSystemEvents(DeviceServiceTestCase):
 class TestHttpHostPort(DeviceServiceTestCase):
     def test_defaults(self):
         ds = _service()
-        self.assertEqual(ds._http_host_port(), ("0.0.0.0", 59986))
+        self.assertEqual(ds._http_host_port(), ("0.0.0.0", 59990))
 
     def test_from_config(self):
         ds = _service(_MockConfig(service=_MockDeviceOpts(host="127.0.0.1", port="8080")))
