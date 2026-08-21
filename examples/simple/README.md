@@ -17,7 +17,7 @@ read/write commands, event publishing to the EdgeX MessageBus, and Core Metadata
   - `edgex-core-data` (port 59880)
   - `edgex-core-command` (port 59882)
   - `edgex-mqtt-broker` (port 1883)
-  - `edgex-core-keeper` (port 8500)
+  - `edgex-core-keeper` (port 59890)
 
   If you don't have one, get it from [edgex-compose](https://github.com/edgexfoundry/edgex-compose)
   and start it first.

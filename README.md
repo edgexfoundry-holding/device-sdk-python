@@ -74,7 +74,7 @@ Configuration is loaded from `configuration.yaml` (see the [simple example](exam
 EDGEX_MESSAGEBUS_HOST=192.168.1.100
 EDGEX_MESSAGEBUS_PORT=1883
 EDGEX_REGISTRY_HOST=edgex-core-keeper
-EDGEX_REGISTRY_PORT=8500
+EDGEX_REGISTRY_PORT=59890
 EDGEX_REGISTRY_TYPE=core-keeper
 ```
 

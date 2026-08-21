@@ -76,6 +76,7 @@ from ..internal.controller.messaging.publish import (
 from ..internal.controller.messaging.callback import _get_base_service_name
 from ..internal.metadata import MetadataClient
 from ..internal.metadata.client import MetadataError
+from ..internal.registry import CoreKeeperRegistryClient, RegistryError
 from ..internal.provision import (
     load_devices,
     load_profiles,
@@ -174,6 +175,9 @@ class DeviceService(DeviceServiceSDK):
 
         #: Security mode configuration
         self._secure_mode = self._read_secure_mode_config()
+
+        #: Core Keeper registry client (set when registration succeeds).
+        self._registry_client: Optional[CoreKeeperRegistryClient] = None
 
         #: The lazily imported AutoEvent manager (see `_auto_event_manager`).
         self._auto_event_manager_instance: Any = None
@@ -1003,6 +1007,57 @@ hostname IP. Extended Core services (core-command) reach this address to execute
                 self._logger.debug("Failed to auto-detect advertised host, falling back to localhost")
         return "localhost"
 
+    # -- Registry (Core Keeper) integration ------------------------------------------
+
+    def _register_with_registry(self) -> None:
+        """Register this service with the Core Keeper registry.
+
+        Mirrors ``go-mod-bootstrap`` ``RegisterWithRegistry``: when ``Registry`` is
+        configured (Host/Port/Type set), the service registers itself with retry
+        until the startup deadline (60s) elapses. Registration is best-effort - a
+        registry that never comes up is logged but does not block startup.
+        """
+        cfg = self.configuration
+        registry = getattr(cfg, "Registry", None) if cfg is not None else None
+        if registry is None:
+            self._logger.debug("No Registry configuration; skipping registry registration")
+            return
+        if not registry.Host or not registry.Port or not registry.Type:
+            self._logger.debug(
+                "Registry configuration is empty or incomplete; skipping registry registration")
+            return
+
+        service = getattr(cfg, "Service", None)
+        check_interval = getattr(service, "HealthCheckInterval", "10s") if service else "10s"
+        advertised_host = self._advertised_host()
+        _, port = self._http_host_port()
+
+        self._registry_client = CoreKeeperRegistryClient(
+            host=registry.Host,
+            port=registry.Port,
+            service_id=self.name(),
+            service_host=advertised_host,
+            service_port=port,
+            check_interval=check_interval,
+            logger=self._logger,
+        )
+        self._logger.info(
+            "Using Registry (%s) from %s:%s", registry.Type, registry.Host, registry.Port)
+        try:
+            self._registry_client.register_with_retry(stop_event=self._shutdown_event)
+        except Exception as exc:  # noqa: BLE001
+            self._logger.error("Registry registration failed: %s", exc)
+            self._registry_client = None
+
+    def _deregister_from_registry(self) -> None:
+        """Deregister from the Core Keeper registry on shutdown (best-effort)."""
+        if self._registry_client is not None:
+            try:
+                self._registry_client.deregister()
+            except Exception as exc:  # noqa: BLE001
+                self._logger.debug("Error deregistering from registry: %s", exc)
+            self._registry_client = None
+
     # -- Security integration -------------------------------------------------------
 
     def _register_with_security_services(self) -> None:
@@ -1260,6 +1315,10 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
         # Initialize messaging client first (needed for send_event, validation, commands, system events)
         self._init_messaging_client()
 
+        # Register with the Core Keeper registry (mirrors go-mod-bootstrap
+        # RegisterWithRegistry: retry until the startup deadline elapses).
+        self._register_with_registry()
+
         self._start_auto_events()
         self._init_http_controller()
         self._start_device_validation_handler()
@@ -1435,6 +1494,9 @@ FastAPI application with uvicorn (blocking). The HTTP serving depends on uvicorn
     def _shutdown(self) -> None:
         """Signal background pumps/subscriptions to stop and cleanup."""
         self._shutdown_event.set()
+        # Deregister from the Core Keeper registry first (mirrors go-mod-bootstrap
+        # shutdown order) so core services stop routing to a dead endpoint.
+        self._deregister_from_registry()
         # Stop config watch threads
         if hasattr(self, "_config_watch_stop"):
             for section_name, stop_event in self._config_watch_stop.items():
