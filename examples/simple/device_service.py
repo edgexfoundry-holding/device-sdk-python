@@ -25,6 +25,7 @@ Then probe::
 from __future__ import annotations
 
 import os
+import random
 import sys
 import time
 from typing import Any, Dict, List, Optional
@@ -168,7 +169,9 @@ class SimpleDriver(ExtendedProtocolDriver):
         except Exception as exc:
             print(f"Failed to send discovered device: {exc}")
 
-    def _default_value(self, value_type: str) -> Any:
+    def _default_value(self, value_type: str, resource_name: str) -> Any:
+        if resource_name == "random-number":
+            return random.randint(0, 100)
         if value_type == VALUETYPE_BOOL:
             return True
         if value_type in (VALUETYPE_INT32,):
@@ -186,7 +189,7 @@ class SimpleDriver(ExtendedProtocolDriver):
             CommandValue(
                 device_resource_name=req.resource_name,
                 value_type=req.value_type,
-                value=self._default_value(req.value_type),
+                value=self._default_value(req.value_type, req.resource_name),
                 origin=time.time_ns(),
             )
             for req in reqs

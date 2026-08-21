@@ -24,7 +24,8 @@ RUN apk --no-cache upgrade
 COPY --from=root / /repo
 
 # Install SDK from repo root (where pyproject.toml expects package_dir = "src")
-RUN pip config set global.index-url https://mirror.nju.edu.cn/pypi/web/simple
+# Optionally set a pip index mirror appropriate for your region, e.g.:
+# RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 RUN pip install --no-cache-dir /repo
 
 # Copy example service and resources
