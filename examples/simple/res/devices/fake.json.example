@@ -1,0 +1,14 @@
+{
+  "name": "fake",
+  "adminState": "UNLOCKED",
+  "operatingState": "UP",
+  "serviceName": "device-simple",
+  "profileName": "fake-profile",
+  "labels": ["simulated"],
+  "location": "1,2",
+  "protocols": {
+    "simple": {
+      "Address": "localhost"
+    }
+  }
+}

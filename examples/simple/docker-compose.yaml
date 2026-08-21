@@ -1,0 +1,61 @@
+# Copyright (C) 2026 YIQISOFT
+# SPDX-License-Identifier: Apache-2.0
+
+# Device Simple - Docker Compose for local development
+# Usage: docker compose -f examples/simple/docker-compose.yaml up --build
+#
+# Connects to existing EdgeX core services (core-metadata, core-data,
+# core-command, core-keeper, redis, postgres, mqtt broker) which must
+# already be running (e.g., via edgex-compose).
+
+version: '3.8'
+
+services:
+  device-simple:
+    image: device-simple:latest
+    container_name: edgex-device-simple
+    environment:
+      SERVICE_HOST: edgex-device-simple
+      SERVICE_PORT: 59990
+      EDGEX_MESSAGEBUS_HOST: edgex-mqtt-broker
+      EDGEX_MESSAGEBUS_PORT: 1883
+      EDGEX_MESSAGEBUS_TOPIC: edgex
+      EDGEX_MESSAGEBUS_TYPE: mqtt
+      EDGEX_MESSAGEBUS_AUTHMODE: none
+      EDGEX_MESSAGEBUS_BASE_TOPIC_PREFIX: edgex
+      EDGEX_REGISTRY_HOST: edgex-core-keeper
+      EDGEX_REGISTRY_PORT: 59890
+      EDGEX_REGISTRY_TYPE: core-keeper
+      EDGEX_CLIENTS_CORE_METADATA_HOST: edgex-core-metadata
+      EDGEX_CLIENTS_CORE_METADATA_PORT: 59881
+      EDGEX_CLIENTS_CORE_METADATA_PROTOCOL: http
+      EDGEX_CLIENTS_CORE_DATA_HOST: edgex-core-data
+      EDGEX_CLIENTS_CORE_DATA_PORT: 59880
+      EDGEX_CLIENTS_CORE_COMMAND_HOST: edgex-core-command
+      EDGEX_CLIENTS_CORE_COMMAND_PORT: 59882
+      # Secure Mode configuration:
+      # EDGEX_SECURE_MODE: "true"
+      # SSLCERTFILE: "/etc/edgex/secrets/device-simple/cert.pem"
+      # SSLKEYFILE: "/etc/edgex/secrets/device-simple/key.pem"
+      # EDGEX_SECRETSTORE_TOKEN_FILE: "/tmp/edgex/secrets/device-simple/token"
+      # VAULT_ADDR: "http://openbao:8200"
+      # EDGEX_JWT_JWKS_URL: "http://openbao:8200/v1/identity/oidc/.well-known/jwks.json"
+      # EDGEX_JWT_ISSUER: "http://openbao:8200"
+      # EDGEX_JWT_AUDIENCE: "device-simple"
+    ports:
+      - "59990:59990"
+    networks:
+      - edgex-network
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://edgex-device-simple:59990/api/v3/ping', timeout=3).raise_for_status()"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+networks:
+  edgex-network:
+    external: true
+    name: edgex_edgex-network

@@ -1,0 +1,82 @@
+# Copyright (C) 2026 YIQISOFT
+# SPDX-License-Identifier: Apache-2.0
+# Minimal configuration for device-simple (defaults from SDK/common config)
+
+Writable:
+  LogLevel: INFO
+
+Service:
+  Host: "localhost"         # advertise localhost for health checks
+  Port: 59990               # device service port (599xx range)
+  StartupMsg: "device simple started"
+
+# MessageBus - uses SDK defaults (host=localhost, port=1883, prefix=edgex, type=mqtt)
+# Override via env: EDGEX_MESSAGEBUS_HOST, EDGEX_MESSAGEBUS_PORT, EDGEX_MESSAGEBUS_TOPIC
+MessageBus:
+  Type: "mqtt"
+  Host: "localhost"
+  Port: 1883
+  PublishTopicPrefix: "events"
+  Optional:
+    ClientId: "device-simple"
+    Qos: "0"
+    KeepAlive: "60"
+    Retained: "false"
+    AutoReconnect: "true"
+    ConnectTimeout: "30"
+    CleanSession: "true"
+    SkipCertVerify: "false"
+    CertFile: ""
+    KeyFile: ""
+    CaFile: ""
+    CertPEMBlock: ""
+    KeyPEMBlock: ""
+    CaPEMBlock: ""
+  AuthMode: "none"
+  # SubscribeTopics: []  # For App Services only
+
+# Max concurrent command requests (<=0 uses SDK default 32)
+MaxConcurrentCommands: 32
+
+Device:
+  # Directory paths (relative to config file)
+  ProfilesDir: "./res/profiles"
+  DevicesDir: "./res/devices"
+  ProvisionWatchersDir: "./res/provisionwatchers"
+  Discovery:
+    Enabled: true
+    Interval: "30s"
+  # Device Down auto-recovery (mirrors Go device-sdk-go)
+  AllowedFails: 3              # max allowed request failures before marking device DOWN
+  DeviceDownTimeout: 30        # seconds to wait before retrying a DOWN device
+  AsyncBufferSize: 100         # buffer size for async readings
+  MaxCmdResultLen: 1024        # max command result length
+  MaxEventSize: 4096           # max event size in bytes
+  ReadingUnits: true           # include units in readings
+  AutoEvents:
+    SendChangedReadingsOnly: false
+
+# Security / Secure Mode configuration:
+# Secure Mode requires:
+# - SecretStore (OpenBao via core-keeper)
+# - Secure MessageBus (MQTT TLS with redisdb secret)
+# - TLS for HTTP endpoints
+# - JWT authentication for API endpoints
+# - API Gateway integration
+Security:
+  # SecureMode: true/false - enable/disable secure mode
+  # When true, service requires SecretStore, TLS certs, JWT auth, etc.
+  SecureMode: false
+  # TLS certificate and key files for HTTP server
+  SSLCertFile: ""
+  SSLKeyFile: ""
+  # SecretStore token file path (set by security-bootstrapper)
+  SecretStoreTokenFile: ""
+  # Vault/OpenBao address for SecretProvider
+  VaultAddr: ""
+  OpenBaoAddr: ""
+  # JWT configuration for API authentication
+  JwtJwksUrl: ""
+  JwtPublicKey: ""
+  JwtIssuer: ""
+  JwtAudience: ""
