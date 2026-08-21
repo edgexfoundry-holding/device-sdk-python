@@ -5,6 +5,12 @@ functionally equivalent to `edgexfoundry/device-sdk-go`, interoperating with the
 core services over the same wire contracts. `device-sdk-go` serves only as the functional
 reference, not as a source-level port.
 
+Motivation: this SDK is introduced to advance EdgeX in the edge AI domain. Python is the
+dominant language of the AI/ML ecosystem (inference runtimes, vision pipelines, NPU/CUDA
+accelerators), and a Python-native device service SDK allows AI-oriented device services —
+camera inference, sensor fusion with ML models, intelligent protocol gateways — to be built
+as first-class citizens of the EdgeX framework.
+
 ## Reference Projects
 - Go reference: `edgexfoundry/device-sdk-go` v4.x (feature parity checklist)
 - Python reference: `edgexfoundry/app-functions-sdk-python` (reusable client/bootstrap/configuration concepts)

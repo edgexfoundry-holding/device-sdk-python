@@ -7,6 +7,10 @@ This repository is a Python package that can be used to build Python-based [devi
 
 The SDK is a functional parallel of the Go Device Service SDK (`device-sdk-go` v4.x): it implements the same Device Service REST API (v3), MessageBus event publishing and command subscription, metadata system events callback, auto-events, device discovery, and provision watchers, interoperating with the same EdgeX core services over the same wire contracts.
 
+### Why a Python SDK
+
+Python is the dominant language of the AI/ML ecosystem. This SDK is introduced to advance EdgeX in the **edge AI** domain, where device services need direct access to Python-native tooling such as inference runtimes (ONNX Runtime, TensorFlow Lite, PyTorch), vision pipelines (OpenCV), and accelerators (NPU/CUDA) at the edge. It enables AI-oriented device services — e.g. camera-based inference services, sensor fusion with ML models, and intelligent protocol gateways — to be built natively in Python while remaining first-class citizens of the EdgeX framework.
+
 ## Usage
 
 Developers can make their own device service by implementing the [`ProtocolDriver`](src/device_sdk_py/interfaces/protocoldriver.py) abstract base class for their desired IoT protocol, and the `main` function to start the Device Service. To implement the `main` function, the [`bootstrap`](src/device_sdk_py/service/bootstrap.py) entry point can be optionally leveraged, or developers can write customized bootstrap code by themselves.
