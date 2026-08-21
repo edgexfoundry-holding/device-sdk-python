@@ -1,12 +1,32 @@
-# Copyright (C) 2026 YIQISOFT
-# SPDX-License-Identifier: Apache-2.0
-
 # Changelog
 
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [4.0.1] - 2026-08-21
+
+### Added
+- **Core Keeper registry support**: EdgeX v4 replaces Consul with core-keeper; `Registry.Type` now defaults to `core-keeper`
+- **TLS/mTLS certificate management**: `TLSManager` with hot-reload, certificate expiry monitoring, mTLS contexts, and self-signed certificate generation (`internal/clients/tls.py`); `cryptography` is an optional lazy dependency
+- **SecretStore integration**: `SecretProvider` abstraction with `InMemorySecretProvider` (insecure mode) and `OpenBaoSecretProvider` (secure mode, KV v2, token renewal)
+- **JWT token auto-refresh**: `JWTAuthenticator` with JWKS support, proactive refresh threshold, and retry on expiry
+- **Core Data client**: event/reading submission with batch queue, retry, and circuit breaker
+- **Core Command client**: command dispatch with retry and circuit breaker
+- **Unified system events callback layer**: all `_on_*` handlers delegate to `application/callback.py`
+- **Device return retry loop**: `AllowedFails`/`DeviceDownTimeout` handling (`application/devicereturn.py`)
+- **Profile scan application layer** (`application/profilescan.py`)
+- **Configuration model aligned with Go**: `ConfigurationStruct` with Go-compatible `to_go_dict()` serialization; `/api/v3/config` output matches the Go SDK byte-for-byte
+- **AutoEventManager interface** (`interfaces/manager.py`)
+
+### Changed
+- **Default service port changed from 59986 to 59990** to avoid conflict with device-rest
+- `provision.py` split into the `internal/provision/` package (common, devices, profiles, provisionwatchers)
+- Busy-wait in the system events loop replaced with a blocking `queue.get(timeout=0.1)`
+- Optional dependencies (`cryptography`, `pyOpenSSL`) are now lazily imported so the SDK core stays zero-dependency
 
 ## [4.0.0] - 2026-08-06
 
@@ -24,25 +44,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Device System Events SDK API**: `PublishDeviceDiscoveryProgressSystemEvent`, `PublishProfileScanProgressSystemEvent`, `PublishGenericSystemEvent`
 - **Validation Subscription**: `edgex/<svc>/validate/device` (ported from Go)
 - **Examples**: `device-simple` with synthetic driver, profiles/devices/watchers YAML resources
-- **Tests**: 22 unit tests covering models, cache, transformer, autoevent, HTTP endpoints, bootstrap
+- **Tests**: unit tests covering models, cache, transformer, autoevent, HTTP endpoints, bootstrap
 
 ### Changed
 - Architecture strictly mirrors `device-sdk-go` v4.1.0-dev (module `device-sdk-go/v4`)
-- Copyright headers updated to `YIQISOFT 2026`
 - Package structure: `src/device_sdk_py/` with `interfaces`, `models`, `internal`, `service`
 
 ### Security
 - Non-root Docker user (`edgex:edgex`)
 - TLS configuration support in MessageBus (SkipCertVerify, CertFile, KeyFile, CAFile, PEM blocks)
 - Auth modes: none, usernamepassword, clientcert, cacert
-
-## [Unreleased]
-
-### Planned
-- NATS Core message bus implementation
-- Secure mode (mTLS, token auth) integration with Core Keeper
-- Core Metadata client implementation (replace placeholder)
-- Name field escaping (RFC3986) for topic construction
-- Prometheus metrics exposition (`/api/v3/metrics` full implementation)
-- Secret provider integration
-- Performance benchmarks and load testing

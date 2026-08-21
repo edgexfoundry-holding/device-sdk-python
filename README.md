@@ -1,145 +1,33 @@
-# Copyright (C) 2026 YIQISOFT
-# SPDX-License-Identifier: Apache-2.0
+# Python Device Service SDK
+[![License](https://img.shields.io/github/license/edgexfoundry/device-sdk-python)](https://choosealicense.com/licenses/apache-2.0/) [![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/) [![EdgeX](https://img.shields.io/badge/EdgeX-4.x-red)](https://www.edgexfoundry.org/) [![GitHub Pull Requests](https://img.shields.io/github/issues-pr-raw/edgexfoundry/device-sdk-python)](https://github.com/edgexfoundry/device-sdk-python/pulls) [![GitHub Contributors](https://img.shields.io/github/contributors/edgexfoundry/device-sdk-python)](https://github.com/edgexfoundry/device-sdk-python/contributors) [![GitHub Commit Activity](https://img.shields.io/github/commit-activity/m/edgexfoundry/device-sdk-python)](https://github.com/edgexfoundry/device-sdk-python/commits)
 
-# EdgeX Device SDK for Python
+## Overview
 
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
-[![EdgeX](https://img.shields.io/badge/EdgeX-4.x-red)](https://www.edgexfoundry.org/)
+This repository is a Python package that can be used to build Python-based [device services](https://docs.edgexfoundry.org/latest/microservices/device/Ch-DeviceServices/) for use within the EdgeX framework.
 
-**EdgeX Foundry Device Service SDK for Python** — an independent, parallel SDK project that fully
-covers the functionality of the official Go SDK (`device-sdk-go` v4.x), interoperating with the
-same EdgeX core services over the same wire contracts. Implements the full Device Service REST
-API, MessageBus event publishing, command subscription, metadata system events callback,
-auto-events, discovery, and provision watchers.
+The SDK is a functional parallel of the Go Device Service SDK (`device-sdk-go` v4.x): it implements the same Device Service REST API (v3), MessageBus event publishing and command subscription, metadata system events callback, auto-events, device discovery, and provision watchers, interoperating with the same EdgeX core services over the same wire contracts.
 
-## Features
+## Usage
 
-- **REST API** (EdgeX v3): `/api/v3/ping`, `version`, `config`, `metrics`, `device/name/{name}/{command}` (GET/PUT), `discovery`, `profilescan`
-- **MessageBus Publishing**: Events → `edgex/events/device/<svc>/<profile>/<device>/<source>` (JSON/CBOR, MaxEventSize)
-- **Command Subscription**: MQTT `edgex/device/command/request/<svc>/#` → semaphore-limited (default 32) → response on `edgex/response/<svc>/<reqId>`
-- **Metadata System Events**: Subscribes to `edgex/system-events/core-metadata/+/+/<svc>/#`, `core-metadata/deviceprofile/delete/#`, provision-watcher topics; dispatches Device/Profile/Watcher/Service CRUD
-- **Async Readings Pump**: Consumes `AsyncValues` channel → transforms → publishes
-- **Discovery Pump**: Consumes discovered devices → matches ProvisionWatchers → registers
-- **Data Transformations**: Mask → Shift → Base → Scale → Offset (read); inverse (write)
-- **Assertions & Mappings**: Per ADR 0011; assertion failure sets OperatingState=DISABLED
-- **CBOR Encoding**: Automatic for binary readings
-- **Configuration**: YAML-based, environment variable overrides, full MessageBus section
+Developers can make their own device service by implementing the [`ProtocolDriver`](src/device_sdk_py/interfaces/protocoldriver.py) abstract base class for their desired IoT protocol, and the `main` function to start the Device Service. To implement the `main` function, the [`bootstrap`](src/device_sdk_py/service/bootstrap.py) entry point can be optionally leveraged, or developers can write customized bootstrap code by themselves.
 
-## Quick Start
+A minimal device service looks like this:
 
-### Prerequisites
-- Python 3.10+
-- MQTT broker (e.g., mosquitto on `127.0.0.1:1883`)
-- EdgeX Core Metadata (optional, for registration)
+```python
+from device_sdk_py.service.bootstrap import bootstrap
 
-### Install
-```bash
-git clone https://github.com/your-org/device-sdk-python
-cd device-sdk-python
-pip install -e .
+service = bootstrap(
+    service_key="device-my-service",
+    service_version="1.0.0",
+    driver=MyDriver(),          # your ProtocolDriver implementation
+    configuration=my_config,    # your Configuration subclass
+)
+service.run()
 ```
 
-### Run Simple Example
-```bash
-# Terminal 1: Start MQTT broker
-mosquitto -p 1883
+Please see the provided [simple device service](examples/simple) as an example, included in this repository.
 
-# Terminal 2: Run device-simple
-cd examples/simple
-python -m device_service
-
-# Terminal 3: Test
-curl http://localhost:59986/api/v3/ping
-curl http://localhost:59986/api/v3/device/name/fake/Get
-curl -X PUT http://localhost:59986/api/v3/device/name/fake/Set \
-  -H "Content-Type: application/json" \
-  -d '{"random-number":"42"}'
-```
-
-### With Docker
-```bash
-docker build -t device-sdk-python .
-docker run -p 59986:59986 \
-  -e EDGEX_MESSAGEBUS_HOST=host.docker.internal \
-  device-sdk-python
-```
-
-## Architecture
-
-```
-device-sdk-python/
-├── src/device_sdk_py/
-│   ├── interfaces/          # ProtocolDriver, DeviceServiceSDK (ABCs)
-│   ├── models/              # CommandValue, CommandRequest, AsyncValues, DiscoveredDevice
-│   ├── internal/
-│   │   ├── cache/           # Devices, Profiles, ProvisionWatchers (singletons)
-│   │   ├── transformer/     # Mask/Shift/Base/Scale/Offset, assertions, mappings
-│   │   ├── autoevent/       # Scheduled event executor
-│   │   ├── application/     # command_read, command_write
-│   │   ├── controller/
-│   │   │   ├── http/        # REST routes (command, discovery, common)
-│   │   │   └── messaging/   # MQTT client, event publish, command sub, system events callback
-│   │   ├── common/          # Constants, errors, utils
-│   │   ├── metadata/        # Core Metadata client (placeholder)
-│   │   └── provision.py     # YAML resource loader
-│   ├── service/             # DeviceService, Bootstrap
-│   └── __init__.py
-├── examples/simple/         # Minimal runnable Device Service
-│   ├── device_service.py    # Configuration + SimpleDriver
-│   └── res/                 # profiles/, devices/, provisionwatchers/, configuration.yaml
-└── tests/                   # Unit tests
-```
-
-## Configuration
-
-`examples/simple/res/configuration.yaml` (key sections):
-
-```yaml
-Service:
-  Host: "0.0.0.0"
-  Port: 59986
-
-MessageBus:              # EdgeX v4 style
-  Host: "127.0.0.1"
-  Port: 1883
-  Type: "mqtt"
-  BaseTopicPrefix: "edgex"
-  AuthMode: "none"
-  Optional:
-    ClientId: ""
-    Qos: "0"
-    KeepAlive: "60"
-    Retained: "false"
-    AutoReconnect: "true"
-    CleanSession: "true"
-    ConnectTimeout: "5"
-    SkipCertVerify: "false"
-
-Device:
-  AsyncBufferSize: 1
-  ProfilesDir: "./res/profiles"
-  DevicesDir: "./res/devices"
-  ProvisionWatchersDir: "./res/provisionwatchers"
-  Labels: ["simple", "simulated"]
-  Discovery:
-    Enabled: false
-    Interval: "30s"
-
-Clients:
-  core-metadata:
-    Host: "127.0.0.1"
-    Port: 59881
-```
-
-Environment variable overrides (all sections):
-```bash
-EDGEX_MESSAGEBUS_HOST=192.168.1.100
-EDGEX_MESSAGEBUS_PORT=1883
-EDGEX_MESSAGEBUS_TOPIC=edgex
-```
-
-## Implementing a ProtocolDriver
+### Implementing a ProtocolDriver
 
 ```python
 from device_sdk_py.interfaces import ProtocolDriver
@@ -152,13 +40,12 @@ class MyDriver(ProtocolDriver):
     def handle_read_commands(self, device_name, protocols, reqs):
         results = []
         for req in reqs:
-            # Talk to your device via protocols[protocol_name]
-            value = read_from_device(req.resource_name)
+            value = read_from_device(req.resource_name)  # talk to your device
             results.append(CommandValue(
                 device_resource_name=req.resource_name,
                 value_type=req.value_type,
                 value=value,
-                origin=time.time_ns()
+                origin=time.time_ns(),
             ))
         return results
 
@@ -166,84 +53,56 @@ class MyDriver(ProtocolDriver):
         for req, param in zip(reqs, params):
             write_to_device(req.resource_name, param.value)
 
-    def start(self): pass
-    def stop(self, force): pass
-    def add_device(self, device_name, protocols, admin_state): pass
-    def update_device(self, device_name, protocols, admin_state): pass
-    def remove_device(self, device_name, protocols): pass
-    def discover(self): pass
-    def validate_device(self, device): pass
+    def start(self): ...
+    def stop(self, force): ...
+    def add_device(self, device_name, protocols, admin_state): ...
+    def update_device(self, device_name, protocols, admin_state): ...
+    def remove_device(self, device_name, protocols): ...
+    def discover(self): ...
+    def validate_device(self, device): ...
 ```
 
-Register in `device_service.py`:
-```python
-from device_sdk_py.service.bootstrap import bootstrap
+## Configuration
 
-bootstrap(
-    service_key="device-my-driver",
-    service_version="1.0.0",
-    driver=MyDriver(),
-    configuration=my_config,
-).run()
+Configuration is loaded from `configuration.yaml` (see the [simple example](examples/simple/res/configuration.yaml)) and can be overridden by environment variables:
+
+```bash
+EDGEX_MESSAGEBUS_HOST=192.168.1.100
+EDGEX_MESSAGEBUS_PORT=1883
+EDGEX_REGISTRY_HOST=edgex-core-keeper
+EDGEX_REGISTRY_PORT=8500
+EDGEX_REGISTRY_TYPE=core-keeper
 ```
 
-## REST API Reference
+The `/api/v3/config` endpoint output is byte-for-byte compatible with the Go SDK (`PascalCase` keys, alphabetical ordering, zero values for empty fields).
+
+## Device Service REST API
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/v3/ping` | Service health |
 | GET | `/api/v3/version` | Service & SDK version |
 | GET | `/api/v3/config` | Full configuration |
-| GET | `/api/v3/metrics` | Prometheus metrics |
+| GET | `/api/v3/metrics` | Service metrics |
 | GET | `/api/v3/device/name/{name}/{command}` | Read command (query: `ds-pushevent`, `ds-returnevent`, `ds-regexcommand`) |
 | PUT | `/api/v3/device/name/{name}/{command}` | Write command (body: `{resource: value}`) |
 | POST | `/api/v3/discovery` | Trigger discovery |
 | DELETE | `/api/v3/discovery` | Stop discovery |
 | POST | `/api/v3/profilescan` | Trigger profile scan |
-| DELETE | `/api/v3/profilescan/device/{name}` | Stop profile scan |
 
-## MessageBus Topics
+## Community
 
-| Purpose | Topic Pattern |
-|---------|---------------|
-| Event Publish | `edgex/events/device/<svc>/<profile>/<device>/<source>` |
-| Command Request | `edgex/device/command/request/<svc>/<device>/<command>/<get\|set>` |
-| Command Response | `edgex/response/<svc>/<requestId>` |
-| System Events (publish) | `edgex/system-events/<svc>/<type>/<action>/<svc>` |
-| Metadata System Events (subscribe) | `edgex/system-events/core-metadata/+/+/<svc>/#` |
-| Profile Delete | `edgex/system-events/core-metadata/deviceprofile/delete/#` |
-| Validation | `edgex/<svc>/validate/device` |
-
-## Testing
-
-```bash
-# Unit tests
-python -m unittest discover tests -v
-
-# With coverage
-pip install coverage
-coverage run -m unittest discover tests
-coverage report -m
-```
-
-## Project Status
-
-| Component | Status |
-|-----------|--------|
-| REST API (v3) | ✅ Complete |
-| Event Publishing | ✅ Complete |
-| Command Subscription | ✅ Complete |
-| System Events Callback | ✅ Complete |
-| Async/Discovered Pumps | ✅ Complete |
-| Data Transformations | ✅ Complete |
-| Assertions/Mappings | ✅ Complete |
-| CBOR Encoding | ✅ Complete |
-| Core Metadata Client | ⚠️ Placeholder |
-| NATS Support | ⚠️ Planned |
-| Secure Mode (TLS) | ⚠️ Planned |
+- Discussion: [https://github.com/orgs/edgexfoundry/discussions](https://github.com/orgs/edgexfoundry/discussions)
+- Mailing lists: [https://lists.edgexfoundry.org/mailman/listinfo](https://lists.edgexfoundry.org/mailman/listinfo)
 
 ## License
 
-Apache 2.0 © 2026 YIQISOFT
+[Apache-2.0](LICENSE)
 
-Based on EdgeX Foundry Device SDK Go (Apache 2.0 © IOTech).
+## Versioning
+
+Please refer to the EdgeX Foundry [versioning policy](https://wiki.edgexfoundry.org/pages/viewpage.action?pageId=21823969) for information on how EdgeX services are released and how EdgeX services are compatible with one another.  Specifically, device services (and the associated SDK), application services (and the associated app functions SDK), and client tools (like the EdgeX CLI and UI) can have independent minor releases, but these services must be compatible with the latest major release of EdgeX.
+
+## Long Term Support
+
+Please refer to the EdgeX Foundry [LTS policy](https://wiki.edgexfoundry.org/pages/viewpage.action?pageId=69173332) for information on support of EdgeX releases. The EdgeX community does not offer support on any non-LTS release outside of the latest release.
