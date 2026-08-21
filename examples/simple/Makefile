@@ -43,10 +43,10 @@ docker-build:
 	@echo "Building Docker image..."
 	docker build -f Dockerfile --build-context root=../.. -t device-simple:latest .
 
-# Run with docker-compose (no build)
+# Run with docker-compose in the background (no build)
 docker-run:
 	@echo "Starting services with docker-compose..."
-	docker compose -f docker-compose.yaml up
+	docker compose -f docker-compose.yaml up -d
 
 # Stop docker-compose services
 docker-stop:

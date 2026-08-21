@@ -24,13 +24,22 @@ read/write commands, event publishing to the EdgeX MessageBus, and Core Metadata
 
 ## Run with Docker (recommended)
 
-From the repository root:
+From the `examples/simple` directory:
+
+```bash
+make docker-build   # builds device-simple:latest from the repository root
+make docker-run     # starts the service via docker compose
+```
+
+Or the equivalent explicit commands, run from the repository root:
 
 ```bash
 docker build -f examples/simple/Dockerfile --build-context root=. -t device-simple:latest ./examples/simple
 cd examples/simple
 docker compose up -d
 ```
+
+Stop the service with `make docker-stop`.
 
 > **Note (China mainland users):** the Dockerfile does not pin a pip mirror by default.
 > If pulls are slow, uncomment/set the `pip config set global.index-url` line in the
