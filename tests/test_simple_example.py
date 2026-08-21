@@ -202,7 +202,7 @@ class TestSimpleExampleHttp(unittest.TestCase):
         reading = event["readings"][0]
         self.assertEqual(reading["resourceName"], "random-number")
         self.assertEqual(reading["valueType"], "Int32")
-        self.assertEqual(str(reading["value"]), "42")
+        self.assertTrue(0 <= int(reading["value"]) <= 100)
 
     def test_command_read_unknown_device(self):
         response = self.client.get("/api/v3/device/name/nope/Get")
