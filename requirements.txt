@@ -6,7 +6,7 @@ requests==2.34.2
 fastapi~=0.111.1
 isodate==0.6.1
 uvicorn==0.52.4
-paho-mqtt==2.1.0
+paho-mqtt==2.2.0
 nats-py==2.15.0
 deepdiff==9.1.0
 xmltodict==0.13.0
